@@ -17,6 +17,8 @@
 
 ## 1.0.5
 
+（English）
+
 A glass pane / iron bars connection-appearance focused update. Gameplay, block state counts and save format are unchanged.
 
 **Changes**
