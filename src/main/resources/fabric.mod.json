@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "vanilla_refit_fabric",
+  "version": "${version}",
+  "name": "原版精修 (Vanilla Refit)",
+  "description": "原版细节精修的 Fabric 移植：竖半砖、竖楼梯、混合半砖，以及火把/灯笼贴合、玻璃板细分等一批原版改动。",
+  "authors": [
+    "btsdhz",
+    "Fabric 移植：tt23xrstudio"
+  ],
+  "license": "MIT",
+  "icon": "assets/vanilla_refit_fabric/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.tt23xrstudio.vanilla_refit_fabric.VanillaRefitFabric"
+    ],
+    "client": [
+      "com.tt23xrstudio.vanilla_refit_fabric.client.VanillaRefitFabricClient"
+    ]
+  },
+  "mixins": [
+    "vanilla_refit_fabric.mixins.json",
+    {
+      "config": "vanilla_refit_fabric.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

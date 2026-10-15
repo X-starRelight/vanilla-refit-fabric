@@ -35,6 +35,9 @@ bin/
 ### Minecraft Modding ###
 run/
 !**/src/**/run/
+# Loom
+.loom-cache/
+*.hprof
 # 多版本开发时的运行目录（run-1.20.1/、run-1.21.4/ …）
 /run-*/
 /run-data-*/

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "vanilla_refit_fabric_test",
+  "version": "1.0.0",
+  "name": "Vanilla Refit Fabric Game Tests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.VanillaRefitGameTest"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.2",
+    "fabric-api": "*",
+    "vanilla_refit_fabric": "*"
+  }
+}
