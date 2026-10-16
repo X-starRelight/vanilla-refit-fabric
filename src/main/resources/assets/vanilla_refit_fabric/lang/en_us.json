@@ -1,0 +1,21 @@
+{
+  "block.vanilla_refit_fabric.smooth_stone_stairs": "Smooth Stone Stairs",
+  "item.vanilla_refit_fabric.smooth_stone_stairs": "Smooth Stone Stairs",
+  "block.vanilla_refit_fabric.merged_slab": "Mixed Slab",
+  "item.vanilla_refit_fabric.merged_slab": "Mixed Slab",
+  "entity.vanilla_refit_fabric.fence_knot": "Fence Rope",
+  "key.categories.vanilla_refit_fabric": "Vanilla Refit",
+  "key.vanilla_refit_fabric.crawl": "Crawl (Hold)",
+  "key.vanilla_refit_fabric.sit": "Sit (Toggle)",
+  "key.vanilla_refit_fabric.placement_mode": "Cycle Placement Mode (Slab/Stair)",
+  "message.vanilla_refit_fabric.placement_mode.slab": "Slab placement mode: %s",
+  "message.vanilla_refit_fabric.placement_mode.stair": "Stair placement mode: %s",
+  "placement_mode.vanilla_refit_fabric.mod": "Default",
+  "placement_mode.vanilla_refit_fabric.mod2": "Mixed",
+  "placement_mode.vanilla_refit_fabric.mod3": "Flush",
+  "placement_mode.vanilla_refit_fabric.vanilla": "Vanilla",
+
+  "vanilla_refit_fabric.configuration.title": "Vanilla Refit Configs",
+  "vanilla_refit_fabric.configuration.section.vanilla_refit_fabric.common.toml": "Vanilla Refit Configs",
+  "vanilla_refit_fabric.configuration.section.vanilla_refit_fabric.common.toml.title": "Vanilla Refit Configs"
+}

@@ -6,7 +6,8 @@
   "environment": "*",
   "entrypoints": {
     "fabric-gametest": [
-      "com.tt23xrstudio.vanilla_refit_fabric.gametest.VanillaRefitGameTest"
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.VanillaRefitGameTest",
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase1RegistryGameTest"
     ]
   },
   "depends": {

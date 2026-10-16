@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     原版精修 NeoForge(main 分支) → Fabric 资源迁移脚本。
 

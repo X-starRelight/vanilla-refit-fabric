@@ -35,6 +35,7 @@ bin/
 ### Minecraft Modding ###
 run/
 !**/src/**/run/
+logs/
 # Loom
 .loom-cache/
 *.hprof

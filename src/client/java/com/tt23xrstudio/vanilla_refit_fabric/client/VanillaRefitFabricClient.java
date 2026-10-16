@@ -1,5 +1,7 @@
 package com.tt23xrstudio.vanilla_refit_fabric.client;
 
+import com.tt23xrstudio.vanilla_refit_fabric.debug.MemProbeClient;
+import com.tt23xrstudio.vanilla_refit_fabric.debug.RenderBench;
 import net.fabricmc.api.ClientModInitializer;
 
 /**
@@ -11,6 +13,10 @@ public class VanillaRefitFabricClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // 内存/渲染基准工具：触发文件（run/btsdhz-memprobe.txt、run/btsdhz-bench.txt）存在时才生效
+        MemProbeClient.register();
+        RenderBench.register();
+
         // 阶段 2+：注册模型/渲染相关事件
     }
 }
