@@ -1,0 +1,7 @@
+{
+  "parent": "vanilla_refit_fabric:block/vertical_stair",
+  "textures": {
+    "particle": "minecraft:block/red_sandstone_top",
+    "texture": "minecraft:block/red_sandstone_top"
+  }
+}

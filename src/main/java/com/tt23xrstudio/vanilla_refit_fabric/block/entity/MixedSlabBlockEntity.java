@@ -1,6 +1,7 @@
 package com.tt23xrstudio.vanilla_refit_fabric.block.entity;
 
 import com.tt23xrstudio.vanilla_refit_fabric.ModBlockEntities;
+import com.tt23xrstudio.vanilla_refit_fabric.util.ClientHooks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -65,13 +66,16 @@ public class MixedSlabBlockEntity extends BlockEntity {
     /**
      * 材质变了以后刷新客户端渲染。
      *
-     * <p>阶段 2 备注：原 NeoForge 版这里做两件事——让模型数据缓存失效（requestModelDataUpdate）
-     * + 标脏所在区块（MixedSlabClientRefresh）。Fabric 版改用模型装配事件后，
-     * 由 {@code setBlocks} 里的 {@code level.sendBlockUpdated} + 收包后 vanilla 自带的区块标脏覆盖；
-     * 若阶段 2 实测新材质要等旁边方块更新才显示，在此补 Fabric 侧的重绘触发。
+     * <p>原 NeoForge 版这里做两件事：模型数据缓存失效（requestModelDataUpdate）+ 标脏所在区块
+     * （MixedSlabClientRefresh）。Fabric 版没有模型数据缓存层，但<b>标脏必须保留</b>：
+     * vanilla 对“方块状态没变”的方块实体更新不会重画区块（{@code ModelManager.requiresRender}
+     * 在新旧状态相同时直接返回 false），不标脏的话新材质要等旁边方块更新才显示。
+     * main 源码集不能引用客户端类，经 {@link ClientHooks} 注入实现。
      */
     private void refreshClientModel() {
-        // 阶段2：按 Fabric 渲染管线补重绘触发（原 requestModelDataUpdate + MixedSlabClientRefresh）
+        if (level != null && level.isClientSide()) {
+            ClientHooks.refreshRenderSection.accept(level, worldPosition);
+        }
     }
 
     public Block getFirstSlab() {

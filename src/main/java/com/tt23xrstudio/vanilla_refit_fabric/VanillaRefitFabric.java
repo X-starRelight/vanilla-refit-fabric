@@ -1,6 +1,8 @@
 package com.tt23xrstudio.vanilla_refit_fabric;
 
 import com.tt23xrstudio.vanilla_refit_fabric.config.BtsdhzConfig;
+import com.tt23xrstudio.vanilla_refit_fabric.network.ModNetworking;
+import com.tt23xrstudio.vanilla_refit_fabric.util.PlacementModeState;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.minecraft.core.registries.Registries;
@@ -32,6 +34,10 @@ public class VanillaRefitFabric implements ModInitializer {
         // 注册方块/物品 → 方块实体类型（顺序：方块先行）
         ModBlocks.initialize();
         ModBlockEntities.initialize();
+
+        // 放置模式：网络载荷类型 + 服务端接收器 + 登录下发（附件在类加载时注册）
+        ModNetworking.register();
+        PlacementModeState.init();
 
         // 创造模式物品栏：平滑石楼梯加入原版“建筑方块”
         CreativeModeTabEvents.modifyOutputEvent(BUILDING_BLOCKS_TAB)

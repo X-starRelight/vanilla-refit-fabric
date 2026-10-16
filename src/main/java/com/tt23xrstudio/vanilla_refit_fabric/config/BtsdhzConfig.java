@@ -27,7 +27,7 @@ import org.slf4j.Logger;
  * <ul>
  *   <li>{@code allowTorchLanternOnSlab}：火把/灵魂火把/灯笼/灵魂灯笼放在下台阶上时，模型与碰撞箱下移半格贴合台阶面（默认 true）</li>
  *   <li>{@code allowLanternUnderTopSlab}：灯笼悬挂于上台阶下方时上移半格贴合上台阶底面（默认 true）</li>
- *   <li>{@code slabCenterSquareRatio}：台阶放置逻辑 2 的中央正方形边长占比（0~1，默认 0.5）</li>
+ *   <li>{@code slabCenterSquareRatio}：默认档中央正方形边长占比（0~1，默认 0.5，台阶与楼梯共用）</li>
  *   <li>{@code allowModdedSlabs}：其它模组的台阶是否也能竖放（实验性，默认 true）</li>
  *   <li>{@code allowModdedStairs}：其它模组的楼梯是否也能竖放（实验性，默认 true）</li>
  *   <li>{@code blocklist}：方块名单，决定哪些方块允许加竖形态（见 {@link Blocklist}）</li>
@@ -62,10 +62,10 @@ public class BtsdhzConfig {
     public boolean allowLanternUnderTopSlab = true;
 
     /**
-     * 台阶放置逻辑 2 的“中央正方形”大小（0~1，0 表示取消该正方形）。
+     * 默认档“中央正方形”大小（0~1，0 表示取消该正方形）。
      *
-     * <p>逻辑 2 在对角线分割基础上，把方块面中央抠出一个正方形：点击正方形内放置平放台阶，
-     * 正方形之外仍按逻辑 1 竖放。读取时会被钳制到 [0, 1]。
+     * <p>默认档在对角线/十字分割基础上，把方块面中央抠出一个正方形：点击正方形内按原版平放，
+     * 正方形之外竖放（台阶与楼梯共用此比例）。读取时会被钳制到 [0, 1]。
      */
     public double slabCenterSquareRatio = 0.5D;
 

@@ -2,7 +2,12 @@
   "required": true,
   "package": "com.tt23xrstudio.vanilla_refit_fabric.mixin",
   "compatibilityLevel": "JAVA_25",
-  "mixins": [],
+  "mixins": [
+    "SlabBlockMixin",
+    "StairBlockMixin",
+    "BlockItemMixin",
+    "ServerPlayerGameModeMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

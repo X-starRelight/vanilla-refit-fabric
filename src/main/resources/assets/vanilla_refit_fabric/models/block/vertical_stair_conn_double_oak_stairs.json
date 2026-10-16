@@ -1,0 +1,7 @@
+{
+  "parent": "vanilla_refit_fabric:block/vertical_stair_conn_double",
+  "textures": {
+    "particle": "minecraft:block/oak_planks",
+    "texture": "minecraft:block/oak_planks"
+  }
+}

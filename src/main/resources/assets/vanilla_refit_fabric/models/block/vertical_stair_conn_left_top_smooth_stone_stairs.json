@@ -1,0 +1,7 @@
+{
+  "parent": "vanilla_refit_fabric:block/vertical_stair_conn_left_top",
+  "textures": {
+    "particle": "minecraft:block/smooth_stone",
+    "texture": "minecraft:block/smooth_stone"
+  }
+}
