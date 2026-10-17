@@ -61,8 +61,66 @@ public final class SlabPlacementRules {
         };
     }
 
+    /**
+     * 侧面放竖楼梯时的朝向：按点击落在面内横向轴的左/右哪一半决定（上下无差别——
+     * 竖楼梯是通柱 L 形，高度方向没有变体）。L 形的“中心块”永远贴墙（= 被点的那一侧），
+     * 左右决定中心块靠墙侧的哪一头；映射到 FACING 用的是 StairBlockMixin#buildLShape
+     * 的中心象限表（NE→东、SE→南、SW→西、NW→北）。
+     *
+     * <p>面内横向轴取「与 UP 叉乘」的方向（北面→东、东面→南、南面→西、西面→北），
+     * 与判定框画线用的坐标系一致。整个侧面都是可点区（上下左右都可），
+     * 顶/底面仍按中央正方形判定——这正是默认档“侧面放置”增强（参考项目只支持顶/底面）。
+     */
+    public static Direction verticalStairFacingForSideFace(UseOnContext context) {
+        Direction face = context.getClickedFace();
+        Direction lateral = face.getClockWise();     // 面内横向轴
+        Direction wallSide = face.getOpposite();     // 放置格里贴墙的那一侧
+
+        BlockPos origin = context.getClickedPos();
+        Vec3 loc = context.getClickLocation();
+        // 点击位置沿横向轴的分量（0=轴负端、1=轴正端）
+        double lateralPos = switch (lateral) {
+            case EAST -> loc.x - origin.getX();
+            case SOUTH -> loc.z - origin.getZ();
+            case WEST -> origin.getX() + 1.0D - loc.x;
+            default -> origin.getZ() + 1.0D - loc.z; // NORTH
+        };
+        Direction lateralSide = lateralPos < 0.5D ? lateral.getOpposite() : lateral;
+
+        // 中心象限：横向轴是 X 时 centerX=左右选择、centerZ=墙侧；是 Z 时对调
+        Direction centerX = lateral.getAxis() == Direction.Axis.X ? lateralSide : wallSide;
+        Direction centerZ = lateral.getAxis() == Direction.Axis.X ? wallSide : lateralSide;
+        if (centerZ == Direction.SOUTH) {
+            return centerX == Direction.EAST ? Direction.SOUTH : Direction.WEST;
+        }
+        return centerX == Direction.EAST ? Direction.EAST : Direction.NORTH;
+    }
+
     /** 半砖朝向：形态（平放 / 竖南北 / 竖东西）+ 占哪一半。 */
     public record Orientation(VerticalSlabMode mode, SlabType type) {
+    }
+
+    /**
+     * 顶面 / 底面点击位置换算出的水平朝向（竖放时决定是“竖南北”还是“竖东西”、以及占哪一半）。
+     *
+     * <p>两个偏移量是在**世界坐标**（动辄上千万）上做减法得到的，浮点消去误差约 1e-9；
+     * 恰好点在对角线上（|Δx| == |Δz|）时，这点误差的正负取决于本块在世界里的坐标，
+     * 于是同一个“相对点击点”在不同坐标下会得出不同朝向 —— 表现就是测试跟着结构在世界里的位置漂移而翻转。
+     *
+     * <p>这里给一个 1e-6 的平局容差：它远小于面内的最小像素步长（1/16 = 0.0625），
+     * 不会改变任何真实点击的判定；平局时按数学上的 {@code |x| <= |z|} 走南北分支，
+     * 与原本 {@code |x| > |z| → 东西、否则 → 南北} 的语义一致，只是不再受浮点噪声左右。
+     *
+     * <p>{@code BlockItemMixin}（放置逻辑）与 {@code SlabBlockMixin}（状态生成）共用这一个实现，
+     * 保证两边结论永远一致。
+     */
+    public static Direction horizontalDirectionFromClick(UseOnContext context) {
+        double x = context.getClickLocation().x - context.getClickedPos().getX() - 0.5;
+        double z = context.getClickLocation().z - context.getClickedPos().getZ() - 0.5;
+        if (Math.abs(x) > Math.abs(z) + 1.0E-6D) {
+            return x > 0 ? Direction.EAST : Direction.WEST;
+        }
+        return z > 0 ? Direction.SOUTH : Direction.NORTH;
     }
 
     /** 点击位置是否落在被点方块面的中央正方形内。 */

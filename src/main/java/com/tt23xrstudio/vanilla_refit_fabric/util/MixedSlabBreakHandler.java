@@ -114,9 +114,9 @@ public final class MixedSlabBreakHandler {
 
     private static boolean applyBreak(Level level, BlockPos pos, BlockState keepState, Block hitBlock,
                                       Player player) {
-        // 阶段5：对称之杖兼容——本格只拆一半时，镜像那边也要只少掉对应的那一半。
-        // 恢复为：CreateSymmetryCompat.finishHalfBreak(level, player, pos, keepState, hitBlock);
-        // （CreateSymmetryCompat 为阶段 5 移植，届时取消此行注释）
+        // 对称之杖兼容——本格只拆一半时，镜像那边也只少掉对应的那一半（tick 末尾重建保留半）
+        com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.finishHalfBreak(
+                level, player, pos, keepState, hitBlock);
 
         // 一次性把整格替换为“保留的那一半”，方块实体会随之被移除，避免两次区块更新
         level.setBlock(pos, keepState, 3);

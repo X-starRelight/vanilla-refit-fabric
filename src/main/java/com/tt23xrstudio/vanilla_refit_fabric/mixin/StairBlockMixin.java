@@ -105,8 +105,15 @@ public abstract class StairBlockMixin {
                     // 连接形态借用原版 shape（5 个值当载体，见 StairConnection）
                     .setValue(StairBlock.SHAPE, conn.toShape()), fluidType);
         } else {
-            result = FluidHolder.with(
-                    original.setValue(ModBlockStateProperties.VERTICAL, false), fluidType);
+            // 侧面（默认档增强，参考项目只支持顶/底面）：竖楼梯贴着被点的那个面放置，
+            // 整个侧面都是可点区；左右两半决定朝向（上下无差别——L 形是通柱）。
+            Direction facing = SlabPlacementRules.verticalStairFacingForSideFace(context);
+            StairConnection conn = getConnection(level, pos, facing);
+            result = FluidHolder.with(original
+                    .setValue(ModBlockStateProperties.VERTICAL, true)
+                    .setValue(StairBlock.FACING, facing)
+                    .setValue(StairBlock.HALF, getConnectionHalf(level, pos, facing, conn))
+                    .setValue(StairBlock.SHAPE, conn.toShape()), fluidType);
         }
 
         if (fluidType != FluidType.NONE && !level.isClientSide()) {

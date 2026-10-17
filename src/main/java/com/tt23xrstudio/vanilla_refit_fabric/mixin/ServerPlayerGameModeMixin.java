@@ -55,17 +55,24 @@ public abstract class ServerPlayerGameModeMixin {
         if (!takesOver) {
             return;
         }
-        // TODO 阶段 5：CreateSymmetryCompat.beginBreak/endBreak（机械动力对称之杖兼容，原版靠
-        //  NeoForge BreakEvent 的补发联动；Fabric 侧由 PlayerBlockBreakEvents.BEFORE 在上游触发，
-        //  本模组自己的对称联动届时改为直接在接管前后调用）。
+        // 对称之杖兼容：接管前记下镜像格（此刻源格与镜像格都还在），接管失败/整拆时收尾清理
+        com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.beginBreak(
+                this.level, this.player, pos, state, sneaking);
         boolean handled = sneaking
                 // 潜行：只拆被准星命中的那一半
                 ? MixedSlabBreakHandler.tryBreakHalf(this.level, pos, state, this.player)
                 // 非潜行：原版整块拆除；混合半砖无掉落表、原版产不出掉落，这里手动接管整挖掉落。
                 : MixedSlabBreakHandler.dropWholeMixed(this.level, pos, state, this.player);
         if (handled) {
+            // 潜行半拆成功：applyBreak 内部的 finishHalfBreak 已消费镜像上下文，这里不用收尾
+            if (!sneaking) {
+                com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.endBreak();
+            }
             cir.setReturnValue(true);
             cir.cancel();
+        } else {
+            // 没接管成：退回整块掉落语义，别把镜像格的材料吞了
+            com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.endBreak();
         }
     }
 }

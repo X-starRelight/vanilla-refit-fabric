@@ -123,7 +123,11 @@ public abstract class SlabBlockMixin {
         BlockState newState;
 
         // 逻辑 3：紧贴点击的那个面放置（点顶面=下台阶，点北面=南竖台阶……）。
-        if (placementMode == PlacementMode.MOD_3) {
+        // 默认档：点侧面也走同一套贴面竖放——整个侧面都是可点区（上下左右都可），
+        // 顶/底面仍按中央正方形判定（见下面的 wantsVertical 分支）。
+        // 参考项目默认档侧面不做竖放，这是按玩家反馈加的增强。
+        boolean horizontalFace = clickedFace == Direction.UP || clickedFace == Direction.DOWN;
+        if (placementMode == PlacementMode.MOD_3 || (placementMode == PlacementMode.MOD && !horizontalFace)) {
             SlabPlacementRules.Orientation orientation = SlabPlacementRules.flushAgainst(clickedFace);
             newState = FluidHolder.with(original.setValue(ModBlockStateProperties.MODE, orientation.mode())
                     .setValue(SlabBlock.TYPE, orientation.type()), fluidType);
@@ -172,15 +176,11 @@ public abstract class SlabBlockMixin {
     }
 
     // ===== 4. 辅助方法：计算水平方向 =====
+    // 平局容差与共享实现见 SlabPlacementRules.horizontalDirectionFromClick：
+    // 偏移量是在世界坐标上做减法得到的，恰好点在对角线上时浮点消去误差会让朝向跟着坐标漂移。
     @Unique
     private Direction getHorizontalDirectionFromClick(BlockPlaceContext context) {
-        double x = context.getClickLocation().x - context.getClickedPos().getX() - 0.5;
-        double z = context.getClickLocation().z - context.getClickedPos().getZ() - 0.5;
-        if (Math.abs(x) > Math.abs(z)) {
-            return x > 0 ? Direction.EAST : Direction.WEST;
-        } else {
-            return z > 0 ? Direction.SOUTH : Direction.NORTH;
-        }
+        return SlabPlacementRules.horizontalDirectionFromClick(context);
     }
 
     // ===== 5. 碰撞箱 =====

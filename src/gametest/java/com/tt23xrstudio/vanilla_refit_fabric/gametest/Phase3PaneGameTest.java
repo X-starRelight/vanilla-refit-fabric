@@ -1,0 +1,300 @@
+package com.tt23xrstudio.vanilla_refit_fabric.gametest;
+
+import com.tt23xrstudio.vanilla_refit_fabric.util.ModBlockStateProperties;
+import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CrossCollisionBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.VoxelShape;
+
+/**
+ * 阶段 3-B：玻璃板 / 铁栏杆“部件化”（12 片）的连接规则、形状与属性注入。
+ *
+ * <p>语义真值 = 参考项目（NeoForge 1.21.1）的 {@code PaneConnection} 规则 1~11：
+ * 12 个小面 = 4 个方向的上下半（下半复用原版 north/east/south/west）+ 4 个角上的水平面片；
+ * 规则只读“邻居是什么方块”，是周围环境的纯函数、与放置顺序无关。
+ */
+public class Phase3PaneGameTest {
+
+    /** 结构是 8×8×8 全空气，坐标一律用相对坐标（0~7），测试主体放在中间避免贴边。 */
+    private static final BlockPos GROUND = new BlockPos(1, 1, 1);
+    private static final BlockPos PANE = new BlockPos(1, 2, 1);
+
+    /** 面中心点（用于构造 BlockHitResult 的命中向量）。 */
+    private static BlockHitResult hit(BlockPos absPos, Direction face) {
+        double x = absPos.getX() + 0.5;
+        double y = absPos.getY() + 0.5;
+        double z = absPos.getZ() + 0.5;
+        if (face.getAxis() == Direction.Axis.X) {
+            x = face == Direction.EAST ? absPos.getX() + 1.0 : absPos.getX();
+        } else if (face.getAxis() == Direction.Axis.Y) {
+            y = face == Direction.UP ? absPos.getY() + 1.0 : absPos.getY();
+        } else {
+            z = face == Direction.SOUTH ? absPos.getZ() + 1.0 : absPos.getZ();
+        }
+        return new BlockHitResult(new net.minecraft.world.phys.Vec3(x, y, z), face, absPos, false);
+    }
+
+    /** 对着 {@code absHitPos} 的 {@code face} 面放一块玻璃板（新方块落在 absHitPos.relative(face)）。 */
+    private static void placePane(GameTestHelper helper, ServerPlayer player, BlockPos absHitPos, Direction face) {
+        BlockHitResult hit = hit(absHitPos, face);
+        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.GLASS_PANE));
+        ((BlockItem) Items.GLASS_PANE).useOn(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
+    }
+
+    private static BlockState stateAt(GameTestHelper helper, BlockPos rel) {
+        ServerLevel level = helper.getLevel();
+        return level.getBlockState(helper.absolutePos(rel));
+    }
+
+    private static void require(GameTestHelper helper, boolean ok, String message) {
+        if (!ok) {
+            helper.fail(message);
+        }
+    }
+
+    private static void requireTrue(GameTestHelper helper, BlockState state,
+                                    net.minecraft.world.level.block.state.properties.Property<Boolean> property,
+                                    boolean expected, String message) {
+        if (!state.hasProperty(property)) {
+            helper.fail(message + "（状态缺少属性 " + property.getName() + "，实际: " + state + "）");
+            return;
+        }
+        if (state.getValue(property) != expected) {
+            helper.fail(message + "，期望 " + property.getName() + "=" + expected
+                    + "，实际 " + state.getValue(property) + "（" + state + "）");
+        }
+    }
+
+    // ===== 无连接：12 片全关（原规则 11 兜底已按实测反馈移除） =====
+
+    /**
+     * 悬空的孤立玻璃板：地面撤掉后上下左右都是空气，什么都没连 → 12 个部件全部关闭，
+     * 外观保持原版那根中心立柱（不再整块伸出来）。
+     * 放置时先靠着地面（保证有落脚点），撤掉地面这一下会触发邻居更新重算。
+     */
+    @GameTest
+    public void isolatedFloatingPaneKeepsVanillaPost(GameTestHelper helper) {
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
+        placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
+        require(helper, stateAt(helper, PANE).is(Blocks.GLASS_PANE), "玻璃板应落在地面上方一格");
+
+        helper.setBlock(GROUND, Blocks.AIR.defaultBlockState());
+        BlockState pane = stateAt(helper, PANE);
+        require(helper, pane.is(Blocks.GLASS_PANE), "撤掉地面后玻璃板应保留在原位，实际: " + pane);
+
+        // 4 个方向的下半
+        requireTrue(helper, pane, CrossCollisionBlock.NORTH, false, "悬空孤立玻璃板不该点亮北下");
+        requireTrue(helper, pane, CrossCollisionBlock.EAST, false, "悬空孤立玻璃板不该点亮东下");
+        requireTrue(helper, pane, CrossCollisionBlock.SOUTH, false, "悬空孤立玻璃板不该点亮南下");
+        requireTrue(helper, pane, CrossCollisionBlock.WEST, false, "悬空孤立玻璃板不该点亮西下");
+        // 4 个方向的上半
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_UP, false, "悬空孤立玻璃板不该点亮北上");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_EAST_UP, false, "悬空孤立玻璃板不该点亮东上");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_UP, false, "悬空孤立玻璃板不该点亮南上");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_WEST_UP, false, "悬空孤立玻璃板不该点亮西上");
+        // 4 个角上的水平面片
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_EAST, false, "悬空孤立玻璃板不该点亮东北角面片");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_EAST, false, "悬空孤立玻璃板不该点亮东南角面片");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_WEST, false, "悬空孤立玻璃板不该点亮西南角面片");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_WEST, false, "悬空孤立玻璃板不该点亮西北角面片");
+
+        helper.succeed();
+    }
+
+    // ===== 规则 1 + 规则 6：落地只连一面墙 → 竖直南北两片整条点亮 =====
+
+    /**
+     * 落地的玻璃板 + 正北一堵墙：只有“北下”一开始为真（不连续），
+     * 规则 6 把它所在的竖直南北大面 4 个小面全部点亮；东西两面与 4 个角保持关闭。
+     */
+    @GameTest
+    public void paneOnGroundAgainstWallLightsVerticalStrip(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
+        placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
+        require(helper, stateAt(helper, PANE).is(Blocks.GLASS_PANE), "玻璃板应落在地面上方一格");
+
+        helper.setBlock(new BlockPos(1, 2, 0), Blocks.STONE.defaultBlockState());
+        BlockState pane = stateAt(helper, PANE);
+
+        requireTrue(helper, pane, CrossCollisionBlock.NORTH, true, "靠墙的玻璃板应点亮北下");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_UP, true, "规则 6 应补上北上");
+        requireTrue(helper, pane, CrossCollisionBlock.SOUTH, true, "规则 6 应补上南下");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_UP, true, "规则 6 应补上南上");
+        requireTrue(helper, pane, CrossCollisionBlock.EAST, false, "东西两面不应被点亮");
+        requireTrue(helper, pane, CrossCollisionBlock.WEST, false, "东西两面不应被点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_EAST, false, "角面片不应被点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_EAST, false, "角面片不应被点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_WEST, false, "角面片不应被点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_WEST, false, "角面片不应被点亮");
+
+        // 形状/碰撞箱跟着部件走：南北贯通（z 0~16 像素）、厚度 2 像素、满高
+        BlockPos absPane = helper.absolutePos(PANE);
+        VoxelShape shape = pane.getShape(level, absPane);
+        VoxelShape collision = pane.getCollisionShape(level, absPane);
+        require(helper, shape.min(Direction.Axis.Z) < 0.01, "面片形状应抵达北面 z=0，minZ=" + shape.min(Direction.Axis.Z));
+        require(helper, shape.max(Direction.Axis.Z) > 0.99, "面片形状应抵达南面 z=1，maxZ=" + shape.max(Direction.Axis.Z));
+        require(helper, shape.min(Direction.Axis.Y) < 0.01, "面片形状应落地 minY=0，minY=" + shape.min(Direction.Axis.Y));
+        require(helper, shape.max(Direction.Axis.Y) > 0.99, "面片形状应满高 maxY=1，maxY=" + shape.max(Direction.Axis.Y));
+        require(helper, collision.max(Direction.Axis.Z) > 0.99, "碰撞箱应与面片形状一致（南北贯通）");
+
+        helper.succeed();
+    }
+
+    // ===== 规则 1（方块夹角）：两面墙 + 斜角上的方块 =====
+
+    /**
+     * 落地玻璃板，北面墙 + 东面墙 + 东北斜角一块石头：三个夹角类部件各就各位，
+     * 规则 4（置假）此时不命中（上下半没成对），所以只有“北下 / 东下 / 东北角”三个为真。
+     */
+    @GameTest
+    public void paneBetweenTwoWallsLightsDiagonalCorner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        // 先把周围环境摆好，再一次成型（规则是纯函数，顺序无关）
+        helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(1, 2, 0), Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(2, 2, 1), Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(2, 2, 0), Blocks.STONE.defaultBlockState());
+
+        placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
+        BlockState pane = stateAt(helper, PANE);
+        require(helper, pane.is(Blocks.GLASS_PANE), "玻璃板应落在地面上方一格，实际: " + pane);
+
+        requireTrue(helper, pane, CrossCollisionBlock.NORTH, true, "北面墙应点亮北下");
+        requireTrue(helper, pane, CrossCollisionBlock.EAST, true, "东面墙应点亮东下");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_EAST, true, "东北斜角方块应点亮东北角面片");
+        requireTrue(helper, pane, CrossCollisionBlock.SOUTH, false, "南面无邻居不应点亮");
+        requireTrue(helper, pane, CrossCollisionBlock.WEST, false, "西面无邻居不应点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_UP, false, "上方无邻居不应点亮上半");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_EAST_UP, false, "上方无邻居不应点亮上半");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_EAST, false, "东南角面片不应点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_SOUTH_WEST, false, "西南角面片不应点亮");
+        requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_WEST, false, "西北角面片不应点亮");
+
+        // 形状：东北角的水平面片（y 7~9 像素）+ 北下/东下两片竖直面片
+        BlockPos absPane = helper.absolutePos(PANE);
+        VoxelShape shape = pane.getShape(level, absPane);
+        require(helper, shape.max(Direction.Axis.X) > 0.99,
+                "东下竖直面片应伸到 x=1，maxX=" + shape.max(Direction.Axis.X));
+        require(helper, shape.min(Direction.Axis.Y) < 0.01,
+                "竖直面片应落地 minY=0，minY=" + shape.min(Direction.Axis.Y));
+        require(helper, shape.max(Direction.Axis.Y) > 0.55 && shape.max(Direction.Axis.Y) < 0.60,
+                "上半未点亮时最高只到角面片顶 9/16，maxY=" + shape.max(Direction.Axis.Y));
+
+        helper.succeed();
+    }
+
+    // ===== 斜角邻居的间接通知（PaneIndirectNeighbourMixin）=====
+
+    /**
+     * 东北斜角上**后放**的那块玻璃板，必须把原点玻璃板的东北角面片点亮：
+     * 斜角不在原版 6 个正交邻居里，靠 updateIndirectNeighbourShapes 补的那 12 格通知。
+     * 顺序刻意反过来（先放原点 → 再放北 → 再放东 → 最后放斜角），中间几步原点都算不出东北角。
+     */
+    @GameTest
+    public void diagonalPaneAddedLaterLightsOriginCorner(GameTestHelper helper) {
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
+        BlockPos absGround = helper.absolutePos(GROUND);
+
+        placePane(helper, player, absGround, Direction.UP);          // 原点 (1,2,1)
+        BlockPos absPane = helper.absolutePos(PANE);
+        placePane(helper, player, absPane, Direction.NORTH);         // 北 (1,2,0)
+        placePane(helper, player, absPane, Direction.EAST);          // 东 (2,2,1)
+        placePane(helper, player, helper.absolutePos(new BlockPos(1, 2, 0)), Direction.EAST);   // 东北 (2,2,0)
+
+        BlockState origin = stateAt(helper, PANE);
+        require(helper, origin.is(Blocks.GLASS_PANE), "原点玻璃板应还在，实际: " + origin);
+        require(helper, stateAt(helper, new BlockPos(2, 2, 0)).is(Blocks.GLASS_PANE),
+                "东北斜角玻璃板应放置成功");
+        requireTrue(helper, origin, ModBlockStateProperties.PANE_NORTH_EAST, true,
+                "斜角玻璃板放下后应点亮原点的东北角面片（间接邻居通知）");
+        requireTrue(helper, origin, CrossCollisionBlock.NORTH, true, "落地配对应点亮北下");
+        requireTrue(helper, origin, CrossCollisionBlock.EAST, true, "落地配对应点亮东下");
+        requireTrue(helper, origin, ModBlockStateProperties.PANE_SOUTH_WEST, false,
+                "西南方向没有邻居，不应被点亮");
+
+        helper.succeed();
+    }
+
+    // ===== 属性注入范围（内存相关：只给原版命名空间注入，状态数 ×256 只花在原版板类上）=====
+
+    /**
+     * 原版的玻璃板 / 染色玻璃板 / 铁栏杆必须带上 8 个附加属性（否则部件化全部失效），
+     * 默认状态 12 个部件全为 false（老存档外观不变）；
+     * 而“不是原版在 Blocks 静态初始化里造出来的方块”不注入 —— 这里用调用栈判定本身验证。
+     */
+    @GameTest
+    public void vanillaPanesGetEightExtraProperties(GameTestHelper helper) {
+        BlockState glass = Blocks.GLASS_PANE.defaultBlockState();
+        BlockState ironBars = Blocks.IRON_BARS.defaultBlockState();
+        BlockState stained = Blocks.STAINED_GLASS_PANE.white().defaultBlockState();
+
+        require(helper, glass.hasProperty(ModBlockStateProperties.PANE_NORTH_EAST),
+                "原版玻璃板应注入 8 个部件属性");
+        require(helper, ironBars.hasProperty(ModBlockStateProperties.PANE_NORTH_EAST),
+                "原版铁栏杆应注入 8 个部件属性");
+        require(helper, stained.hasProperty(ModBlockStateProperties.PANE_NORTH_EAST),
+                "原版染色玻璃板应注入 8 个部件属性");
+
+        require(helper, PaneCornerSupport.isSupportedPaneBlock(Blocks.GLASS_PANE), "玻璃板应算部件化目标");
+        require(helper, PaneCornerSupport.isSupportedPaneBlock(Blocks.IRON_BARS), "铁栏杆应算部件化目标");
+        require(helper, !PaneCornerSupport.isSupportedPaneBlock(Blocks.OAK_FENCE), "栅栏不是板类，不应算部件化目标");
+        require(helper, PaneCornerSupport.isSupportedPane(glass), "原版玻璃板状态应算支持的玻璃板");
+
+        // 默认状态保持原版：12 个部件全为 false
+        requireTrue(helper, glass, CrossCollisionBlock.NORTH, false, "默认玻璃板北下应为 false");
+        requireTrue(helper, glass, ModBlockStateProperties.PANE_NORTH_UP, false, "默认玻璃板北上应为 false");
+        requireTrue(helper, glass, ModBlockStateProperties.PANE_NORTH_EAST, false, "默认玻璃板东北角应为 false");
+
+        // 注入判定走“调用栈里有 Blocks 类”这条：本测试的调用栈里没有 Blocks，必须判否
+        require(helper, !PaneCornerSupport.shouldInjectPaneProperties(),
+                "非 Blocks 构造路径不应注入部件属性");
+
+        helper.succeed();
+    }
+
+    // ===== 放置顺序无关性（规则是周围环境的纯函数）=====
+
+    /**
+     * 同一个场景、两种摆放顺序，得到同一份状态：先放斜角再放原点 vs 先放原点再放斜角。
+     */
+    @GameTest
+    public void paneRulesAreOrderIndependent(GameTestHelper helper) {
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+
+        // 场景一：先摆周围，后放原点
+        helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(1, 2, 0), Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(2, 2, 1), Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(2, 2, 0), Blocks.STONE.defaultBlockState());
+        placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
+        BlockState first = stateAt(helper, PANE);
+
+        // 场景二：拆掉原点重放一次（同一批邻居，重算路径不同：getStateForPlacement）
+        helper.setBlock(PANE, Blocks.AIR.defaultBlockState());
+        placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
+        BlockState second = stateAt(helper, PANE);
+
+        require(helper, first == second || first.equals(second),
+                "两次放置应得到同一份状态：\n  第一次=" + first + "\n  第二次=" + second);
+
+        helper.succeed();
+    }
+}

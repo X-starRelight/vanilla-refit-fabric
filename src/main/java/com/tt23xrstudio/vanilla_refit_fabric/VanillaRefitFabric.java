@@ -2,9 +2,11 @@ package com.tt23xrstudio.vanilla_refit_fabric;
 
 import com.tt23xrstudio.vanilla_refit_fabric.config.BtsdhzConfig;
 import com.tt23xrstudio.vanilla_refit_fabric.network.ModNetworking;
+import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
 import com.tt23xrstudio.vanilla_refit_fabric.util.PlacementModeState;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -42,6 +44,12 @@ public class VanillaRefitFabric implements ModInitializer {
         // 创造模式物品栏：平滑石楼梯加入原版“建筑方块”
         CreativeModeTabEvents.modifyOutputEvent(BUILDING_BLOCKS_TAB)
                 .register(output -> output.accept(ModBlocks.SMOOTH_STONE_STAIRS_ITEM));
+
+        // 玻璃板部件属性注入自检（服务器启动时方块注册表已就绪）
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> PaneCornerSupport.logSummary());
+
+        // 机械动力「对称之杖」兼容（反射软依赖：机械动力不在时类内逻辑自行短路）
+        com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.init();
 
         LOGGER.info("[原版精修] Fabric 26.2 初始化完成，配置文件：{}", BtsdhzConfig.file());
     }

@@ -1,0 +1,7 @@
+{
+  "parent": "vanilla_refit_fabric:block/pane_stick",
+  "textures": {
+    "pane": { "force_translucent": true, "sprite": "minecraft:block/brown_stained_glass" },
+    "edge": { "force_translucent": true, "sprite": "minecraft:block/brown_stained_glass_pane_top" }
+  }
+}

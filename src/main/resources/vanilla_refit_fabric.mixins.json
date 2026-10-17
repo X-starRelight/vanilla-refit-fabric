@@ -6,7 +6,22 @@
     "SlabBlockMixin",
     "StairBlockMixin",
     "BlockItemMixin",
-    "ServerPlayerGameModeMixin"
+    "ServerPlayerGameModeMixin",
+    "BlockOnSlabStateMixin",
+    "TorchOnSlabMixin",
+    "RedstoneTorchOnSlabMixin",
+    "LanternOnSlabMixin",
+    "FenceOnSlabMixin",
+    "WallOnSlabMixin",
+    "CrossCollisionOnSlabMixin",
+    "OnSlabCollisionMixin",
+    "ClipContextShapeMixin",
+    "OnSlabPickBlockMixin",
+    "BlockBehaviourSlabWallMixin",
+    "IronBarsBlockMixin",
+    "PaneCornerShapeMixin",
+    "PaneIndirectNeighbourMixin",
+    "LevelChunkPostProcessMixin"
   ],
   "injectors": {
     "defaultRequire": 1

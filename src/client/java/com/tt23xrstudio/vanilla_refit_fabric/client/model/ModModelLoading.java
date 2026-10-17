@@ -3,6 +3,7 @@ package com.tt23xrstudio.vanilla_refit_fabric.client.model;
 import com.tt23xrstudio.vanilla_refit_fabric.VanillaRefitFabric;
 import com.tt23xrstudio.vanilla_refit_fabric.block.MixedSlabBlock;
 import com.tt23xrstudio.vanilla_refit_fabric.util.ModBlockStateProperties;
+import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
 import com.tt23xrstudio.vanilla_refit_fabric.util.SlabSupport;
 import com.tt23xrstudio.vanilla_refit_fabric.util.VerticalSlabMode;
 import java.util.Map;
@@ -63,22 +64,35 @@ public final class ModModelLoading {
      */
     private static final Map<BlockState, BlockStateModel.UnbakedRoot> TEMPLATE_ROOTS = new ConcurrentHashMap<>();
 
+    /**
+     * 玻璃板 / 铁栏杆：被包装的模型 → 共享的那个 {@link PaneBakedModel}。
+     *
+     * <p>blockstate 只留一个变体，所以同一块方块的 8,192 个状态共用同一份被包装模型；
+     * 这里用恒等映射保证「一块材质 = 一个包装实例」，不会按状态刷出几千份。
+     * 每次资源重载开头清空（模型对象随重载作废）。
+     */
+    private static final Map<BlockStateModel, BlockStateModel> PANE_WRAPPERS =
+            java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+
     /** 模板缺失只提示一次的方块（每次重载清空）。 */
     private static final Set<Identifier> MISSING_LOGGED = ConcurrentHashMap.newKeySet();
 
     private ModModelLoading() {
     }
 
-    /** 注册模型装载插件；客户端初始化时调用一次。 */
+    /** 登记模型装载插件；客户端初始化时调用一次。 */
     public static void register() {
         ModelLoadingPlugin.register(ctx -> {
             // 每次重载开头：清掉上一轮的模板缓存
             TEMPLATE_ROOTS.clear();
             MISSING_LOGGED.clear();
+            PANE_WRAPPERS.clear();
             // 加载阶段：捕获橡木模板载体的竖直状态模型
             ctx.modifyBlockModelOnLoad().register(ModelModifier.OVERRIDE_PHASE, ModModelLoading::onLoadBlock);
             // 烘焙阶段：按状态换模型
             ctx.modifyBlockModelAfterBake().register(ModelModifier.OVERRIDE_PHASE, ModModelLoading::afterBake);
+            // 玻璃板 / 铁栏杆：8 个部件模板登记为要额外烘焙的模型（blockstate 不再引用它们）
+            PanePieceModels.register(ctx);
         });
     }
 
@@ -100,6 +114,10 @@ public final class ModModelLoading {
         if (block instanceof MixedSlabBlock) {
             return state.hasProperty(ModBlockStateProperties.MODE) ? new MixedSlabModel(model) : model;
         }
+        // 玻璃板 / 铁栏杆：12 个部件按状态拼装（一个实例服务全部状态）
+        if (PaneCornerSupport.isSupportedPaneBlock(block)) {
+            return PANE_WRAPPERS.computeIfAbsent(model, ModModelLoading::wrapPane);
+        }
         // 竖直台阶 / 竖直楼梯：模板几何 + 目标贴图
         if (state.hasProperty(ModBlockStateProperties.MODE)) {
             return wrapSlabState(state, block, model, context);
@@ -107,7 +125,30 @@ public final class ModModelLoading {
         if (state.hasProperty(ModBlockStateProperties.VERTICAL)) {
             return wrapStairState(state, block, model, context);
         }
-        return model;
+        // 阶段 3：贴台阶位移的视觉包装。
+        // 火把类（ON_SLAB=true）与墙/栅栏/灯笼（SLAB_OFFSET=lowered/raised）整体位移半格。
+        // 栅栏先包 FenceStepModel（内层）：FRAPI transform 按 LIFO 应用，后压入的先执行，
+        // 横杆分类看到的是未位移的原版坐标；位移包装在外层最后平移。普通栅栏也要包
+        // FenceStepModel——它可能是跨台阶关节里"未位移的高/低侧"。
+        BlockStateModel result = model;
+        if (block instanceof net.minecraft.world.level.block.FenceBlock) {
+            result = new FenceStepModel(result);
+        }
+        if (state.hasProperty(ModBlockStateProperties.ON_SLAB)
+                && state.getValue(ModBlockStateProperties.ON_SLAB)) {
+            return new SlabbedLoweringModel(result);
+        }
+        if (state.hasProperty(ModBlockStateProperties.SLAB_OFFSET)) {
+            com.tt23xrstudio.vanilla_refit_fabric.util.SlabOffset offset =
+                    state.getValue(ModBlockStateProperties.SLAB_OFFSET);
+            if (offset == com.tt23xrstudio.vanilla_refit_fabric.util.SlabOffset.LOWERED) {
+                return new SlabbedLoweringModel(result);
+            }
+            if (offset == com.tt23xrstudio.vanilla_refit_fabric.util.SlabOffset.RAISED) {
+                return new SlabbedRaisingModel(result);
+            }
+        }
+        return result;
     }
 
     /** 竖直台阶状态 → {@link RetexturedTemplateModel}。 */
@@ -193,6 +234,21 @@ public final class ModModelLoading {
             }
             return null;
         }
+    }
+
+    /**
+     * 玻璃板 / 铁栏杆 → 按状态拼装 12 个部件的模型。
+     *
+     * <p>认不出大面 / 断面贴图（资源包改了棍模型）时保持原样，只警告一次的语义交给
+     * 重复调用自然形成（同一批模型只会走到这里一次）。
+     */
+    private static BlockStateModel wrapPane(BlockStateModel model) {
+        PaneBakedModel wrapped = PaneBakedModel.create(model);
+        if (wrapped == null) {
+            VanillaRefitFabric.LOGGER.warn("[原版精修/模型] 玻璃板/铁栏杆的棍模型认不出大面或断面贴图，退回原版外观");
+            return model;
+        }
+        return wrapped;
     }
 
     /** 该方块是否由运行时接管竖形态模型（手工特例、模板载体、本模组自己的方块都不接管）。 */

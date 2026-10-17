@@ -71,6 +71,9 @@ public abstract class BlockItemMixin {
             if (!creative) {
                 stack.shrink(1);
             }
+            // 对称之杖兼容：刚合并出的组合半砖把材质登记到镜像格（tick 末尾写入）
+            com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.onMergedSlabPlaced(
+                    level, clickedPos, level.getBlockState(clickedPos), context.getPlayer());
             cir.setReturnValue(InteractionResult.SUCCESS);
             cir.cancel();
             return;
@@ -137,12 +140,6 @@ public abstract class BlockItemMixin {
     }
 
     private Direction getHorizontalDirectionFromClick(UseOnContext context) {
-        double x = context.getClickLocation().x - context.getClickedPos().getX() - 0.5;
-        double z = context.getClickLocation().z - context.getClickedPos().getZ() - 0.5;
-        if (Math.abs(x) > Math.abs(z)) {
-            return x > 0 ? Direction.EAST : Direction.WEST;
-        } else {
-            return z > 0 ? Direction.SOUTH : Direction.NORTH;
-        }
+        return SlabPlacementRules.horizontalDirectionFromClick(context);
     }
 }

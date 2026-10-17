@@ -100,8 +100,10 @@ public final class RetexturedTemplateModel extends WrapperBlockStateModel {
                     emitter.cullFace(bucket);
                     emitter.fromBakedQuad(quad);
                     if (target != source) {
-                        retexture(emitter, source, target);
-                        emitter.postMaterialBake(new Material.Baked(target, forceTranslucent));
+                        // 26.2：模板 quad 的 UV 已是图集坐标——换图要把 UV 从旧图区域等比重映到
+                        // 新图区域（materialBake 是“单位 UV → 图集”的映射，对图集坐标再映一遍
+                        // 会飞出贴图、整面纯色）。材质用 postMaterialBake 换，不碰 UV。
+                        QuadRetexture.apply(emitter, quad, source, target, forceTranslucent);
                     }
                     emitter.ambientOcclusion(ao);
                     emitter.shadeMode(ShadeMode.VANILLA);
@@ -112,19 +114,6 @@ public final class RetexturedTemplateModel extends WrapperBlockStateModel {
 
         if (forceOpaque) {
             emitter.popTransform();
-        }
-    }
-
-    /** 按「在旧图里的相对位置」把 UV 等比映射到新图上，保持模板里定好的区域。 */
-    private static void retexture(QuadEmitter emitter, TextureAtlasSprite source, TextureAtlasSprite target) {
-        float sourceWidth = source.getU1() - source.getU0();
-        float sourceHeight = source.getV1() - source.getV0();
-        for (int vertex = 0; vertex < 4; vertex++) {
-            float u = emitter.u(vertex);
-            float v = emitter.v(vertex);
-            float relativeU = sourceWidth == 0.0F ? 0.0F : (u - source.getU0()) / sourceWidth;
-            float relativeV = sourceHeight == 0.0F ? 0.0F : (v - source.getV0()) / sourceHeight;
-            emitter.uv(vertex, target.getU(relativeU), target.getV(relativeV));
         }
     }
 

@@ -486,6 +486,101 @@ public class Phase2GameTest {
         helper.succeed();
     }
 
+    // ===== 13. 默认档增强：侧面点击 → 贴面竖放（参考项目只支持顶/底面） =====
+
+    /** 点完整方块的北面：放置格在北侧，贴面竖台阶占南半（VERTICAL_NS+TOP），落点上下左右不敏感。 */
+    @GameTest
+    public void defaultSlabSideClickPlacesFlushVertical(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos base = helper.absolutePos(REL);
+        helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+
+        // 点北面中央 (0.5, 0.5, 0.0)：整个侧面都是可点区
+        BlockHitResult hit = new BlockHitResult(
+                new Vec3(base.getX() + 0.5, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
+        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_SLAB));
+        ((BlockItem) Items.STONE_SLAB).useOn(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
+
+        BlockState placed = level.getBlockState(base.north());
+        if (placed.getBlock() != Blocks.STONE_SLAB
+                || placed.getValue(ModBlockStateProperties.MODE) != VerticalSlabMode.VERTICAL_NS
+                || placed.getValue(SlabBlock.TYPE) != SlabType.TOP) {
+            helper.fail("默认档点北面应贴面竖放（VERTICAL_NS+TOP=南半贴墙），实际 " + placed);
+            return;
+        }
+        helper.succeed();
+    }
+
+    /** 点东面：放置格在东侧，贴面竖台阶占西半（VERTICAL_EW+BOTTOM=西半贴墙），与北面对称。 */
+    @GameTest
+    public void defaultSlabEastSideClickPlacesEastHalf(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos base = helper.absolutePos(REL);
+        helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+
+        BlockHitResult hit = new BlockHitResult(
+                new Vec3(base.getX() + 1.0, base.getY() + 0.5, base.getZ() + 0.5), Direction.EAST, base, false);
+        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_SLAB));
+        ((BlockItem) Items.STONE_SLAB).useOn(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
+
+        BlockState placed = level.getBlockState(base.east());
+        if (placed.getBlock() != Blocks.STONE_SLAB
+                || placed.getValue(ModBlockStateProperties.MODE) != VerticalSlabMode.VERTICAL_EW
+                || placed.getValue(SlabBlock.TYPE) != SlabType.BOTTOM) {
+            helper.fail("默认档点东面应贴面竖放（VERTICAL_EW+BOTTOM=西半贴墙），实际 " + placed);
+            return;
+        }
+        helper.succeed();
+    }
+
+    /** 点北面左半（x=0.2）：竖楼梯贴墙、L 形中心在西南 → FACING=WEST。 */
+    @GameTest
+    public void defaultStairSideClickLeftHalfFacesWest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos base = helper.absolutePos(REL);
+        helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+
+        BlockHitResult hit = new BlockHitResult(
+                new Vec3(base.getX() + 0.2, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
+        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COBBLESTONE_STAIRS));
+        ((BlockItem) Items.COBBLESTONE_STAIRS).useOn(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
+
+        BlockState placed = level.getBlockState(base.north());
+        if (placed.getBlock() != Blocks.COBBLESTONE_STAIRS
+                || !placed.getValue(ModBlockStateProperties.VERTICAL)
+                || placed.getValue(StairBlock.FACING) != Direction.WEST) {
+            helper.fail("默认档点北面左半应竖放且 FACING=WEST，实际 " + placed);
+            return;
+        }
+        helper.succeed();
+    }
+
+    /** 点北面右半（x=0.8）：竖楼梯贴墙、L 形中心在东南 → FACING=SOUTH。 */
+    @GameTest
+    public void defaultStairSideClickRightHalfFacesSouth(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos base = helper.absolutePos(REL);
+        helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+
+        BlockHitResult hit = new BlockHitResult(
+                new Vec3(base.getX() + 0.8, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
+        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COBBLESTONE_STAIRS));
+        ((BlockItem) Items.COBBLESTONE_STAIRS).useOn(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
+
+        BlockState placed = level.getBlockState(base.north());
+        if (placed.getBlock() != Blocks.COBBLESTONE_STAIRS
+                || !placed.getValue(ModBlockStateProperties.VERTICAL)
+                || placed.getValue(StairBlock.FACING) != Direction.SOUTH) {
+            helper.fail("默认档点北面右半应竖放且 FACING=SOUTH，实际 " + placed);
+            return;
+        }
+        helper.succeed();
+    }
+
     // ===== 工具方法 =====
 
     private static BlockState slabState(VerticalSlabMode mode, SlabType type) {

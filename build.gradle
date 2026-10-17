@@ -55,8 +55,19 @@ fabricApi {
 		createSourceSet = true
 		modId = "vanilla_refit_fabric_test"
 		enableGameTests = true
-		enableClientGameTests = false
+		// 有头测试：真开客户端、真建世界、真渲染再截图对比（阶段里程碑验收用）
+		enableClientGameTests = true
 		eula = true
+	}
+}
+
+// 有头测试的 run：真开客户端。本机内存吃紧（资源重载期原生分配失败过一次），
+// 这个 run 单独把堆上限压到 2G，给窗口 / GPU / JVM 内部分配留余量。
+loom {
+	runs {
+		clientGameTest {
+			vmArg "-Xmx2G"
+		}
 	}
 }
 

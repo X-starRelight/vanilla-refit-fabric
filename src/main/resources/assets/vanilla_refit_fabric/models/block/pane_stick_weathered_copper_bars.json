@@ -1,0 +1,7 @@
+{
+  "parent": "vanilla_refit_fabric:block/pane_stick_bars",
+  "textures": {
+    "pane": { "force_translucent": true, "sprite": "minecraft:block/weathered_copper_bars" },
+    "edge": { "force_translucent": true, "sprite": "minecraft:block/weathered_copper_bars" }
+  }
+}
