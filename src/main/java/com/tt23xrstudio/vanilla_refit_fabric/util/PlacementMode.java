@@ -10,8 +10,9 @@ import net.minecraft.util.StringRepresentable;
  */
 public enum PlacementMode implements StringRepresentable {
     /**
-     * 默认档（README「默认」）：点方块面靠外区域竖放，点中央正方形内按原版平放；
-     * 手持时显示分割辅助线（台阶为对角线、楼梯为十字线，均被中央正方形截断）。
+     * 默认档（README「默认」）：顶/底面点外圈竖放、点中央正方形内原版平放；
+     * 侧面是三条竖带——左带/右带竖放、中间带原版平放。
+     * 手持时显示分割辅助线（顶/底面为对角线/十字加正方形，侧面为两条竖线）。
      * 正方形边长占比见配置 {@code slabCenterSquareRatio}，见 BlockItemMixin、
      * SlabPlacementRules、StairBlockMixin。
      */

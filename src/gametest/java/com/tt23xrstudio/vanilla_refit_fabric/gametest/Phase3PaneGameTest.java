@@ -22,7 +22,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 /**
  * 阶段 3-B：玻璃板 / 铁栏杆“部件化”（12 片）的连接规则、形状与属性注入。
  *
- * <p>语义真值 = 参考项目（NeoForge 1.21.1）的 {@code PaneConnection} 规则 1~11：
+ * <p>语义真值 = 参考项目（NeoForge 1.21.1）的 {@code PaneConnection} 规则 1~10，外加移植时补上的
+ * 规则 3“方向直连”（参考项目文档写了但代码从未实现，靠已删除的规则 11 兜底掩盖）：
  * 12 个小面 = 4 个方向的上下半（下半复用原版 north/east/south/west）+ 4 个角上的水平面片；
  * 规则只读“邻居是什么方块”，是周围环境的纯函数、与放置顺序无关。
  */
@@ -229,6 +230,64 @@ public class Phase3PaneGameTest {
         requireTrue(helper, origin, CrossCollisionBlock.EAST, true, "落地配对应点亮东下");
         requireTrue(helper, origin, ModBlockStateProperties.PANE_SOUTH_WEST, false,
                 "西南方向没有邻居，不应被点亮");
+
+        helper.succeed();
+    }
+
+    // ===== 悬空两块板互连（规则 3：方向直连）=====
+
+    /**
+     * 两块悬空相邻的玻璃板（上下左右再无任何方块）：必须像原版一样互相连接。
+     * 规则 3 让“有板的那一侧下半”直接置真，规则 6 再把整条竖直大面补满 4 个小面
+     * （与落地场景“板贴墙 → 整条竖带点亮”的已验收外观一致），东西面与 4 个角保持关闭。
+     * 这正是“必须要接到完整方块上才可以自动连接”那个 bug 的回归测试：
+     * 上一版里配对规则一条都命中不了 → 12 片全假 → 两根互不连接的棍。
+     */
+    @GameTest
+    public void floatingPanePairConnectsLikeVanilla(GameTestHelper helper) {
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        // 临时脚手架：先借它落脚放下板 A，撤掉后 A 完全悬空（上下左右只剩另一块板）
+        helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
+        placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
+        require(helper, stateAt(helper, PANE).is(Blocks.GLASS_PANE), "玻璃板 A 应落在脚手架上方");
+        helper.setBlock(GROUND, Blocks.AIR.defaultBlockState());     // 拆脚手架 → A 悬空
+
+        // 板 B 贴着 A 的南面真放下去（走 getStateForPlacement 路径）
+        placePane(helper, player, helper.absolutePos(PANE), Direction.SOUTH);
+        BlockPos relB = new BlockPos(1, 2, 2);
+        require(helper, stateAt(helper, relB).is(Blocks.GLASS_PANE),
+                "玻璃板 B 应落在 A 的南面，实际: " + stateAt(helper, relB));
+
+        BlockState a = stateAt(helper, PANE);
+        // A：南面连着板 → 南下/南上都亮；规则 6 把同一大面（南北竖直面）补满，
+        // 于是朝空气的北面也跟着亮——与落地板贴墙时的竖带行为一致
+        requireTrue(helper, a, CrossCollisionBlock.SOUTH, true, "悬空板 A 应点亮南下");
+        requireTrue(helper, a, ModBlockStateProperties.PANE_SOUTH_UP, true, "悬空板 A 应点亮南上");
+        requireTrue(helper, a, CrossCollisionBlock.NORTH, true, "规则 6 应把北面也补上（同一大面）");
+        requireTrue(helper, a, ModBlockStateProperties.PANE_NORTH_UP, true, "规则 6 应把北上也补上（同一大面）");
+        requireTrue(helper, a, CrossCollisionBlock.EAST, false, "东西两面无邻居不应点亮");
+        requireTrue(helper, a, CrossCollisionBlock.WEST, false, "东西两面无邻居不应点亮");
+        requireTrue(helper, a, ModBlockStateProperties.PANE_NORTH_EAST, false, "角面片不应点亮");
+        requireTrue(helper, a, ModBlockStateProperties.PANE_SOUTH_EAST, false, "角面片不应点亮");
+        requireTrue(helper, a, ModBlockStateProperties.PANE_SOUTH_WEST, false, "角面片不应点亮");
+        requireTrue(helper, a, ModBlockStateProperties.PANE_NORTH_WEST, false, "角面片不应点亮");
+
+        BlockState b = stateAt(helper, relB);
+        // B：与 A 完全对称（北面连着板）
+        requireTrue(helper, b, CrossCollisionBlock.NORTH, true, "悬空板 B 应点亮北下");
+        requireTrue(helper, b, ModBlockStateProperties.PANE_NORTH_UP, true, "悬空板 B 应点亮北上");
+        requireTrue(helper, b, CrossCollisionBlock.SOUTH, true, "规则 6 应把南面也补上（同一大面）");
+        requireTrue(helper, b, ModBlockStateProperties.PANE_SOUTH_UP, true, "规则 6 应把南上也补上（同一大面）");
+        requireTrue(helper, b, CrossCollisionBlock.EAST, false, "东西两面无邻居不应点亮");
+        requireTrue(helper, b, CrossCollisionBlock.WEST, false, "东西两面无邻居不应点亮");
+
+        // 满高连接：面片形状应从地板一直伸到顶
+        ServerLevel level = helper.getLevel();
+        VoxelShape shape = b.getShape(level, helper.absolutePos(relB));
+        require(helper, shape.min(Direction.Axis.Y) < 0.01,
+                "悬空连接面片应抵达 minY=0，minY=" + shape.min(Direction.Axis.Y));
+        require(helper, shape.max(Direction.Axis.Y) > 0.99,
+                "悬空连接面片应满高 maxY=1，maxY=" + shape.max(Direction.Axis.Y));
 
         helper.succeed();
     }

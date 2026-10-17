@@ -19,6 +19,50 @@ public final class SlabPlacementRules {
     }
 
     /**
+     * 侧面竖带的分界（面内 u 坐标，与判定框画的两条竖线共用）：
+     * 左带 u&lt;1/3、中间带 1/3≤u&lt;2/3（原版平放）、右带 u≥2/3。
+     */
+    public static final double SIDE_STRIP_EDGE = 1.0D / 3.0D;
+    public static final double SIDE_STRIP_EDGE_2 = 2.0D / 3.0D;
+
+    /** 侧面点击是否落在“中间竖带”（原版平放区）；顶/底面不走这里（那是中央正方形判定）。 */
+    public static boolean isInSideMiddleStrip(UseOnContext context) {
+        Direction face = context.getClickedFace();
+        if (face.getAxis() == Direction.Axis.Y) {
+            return false;
+        }
+        double u = faceLocalU(context);
+        return u >= SIDE_STRIP_EDGE && u < SIDE_STRIP_EDGE_2;
+    }
+
+    /**
+     * 点击位置在被点方块顶/底面的中央正方形内（原版平放区）。
+     * 侧面不用它——侧面是三条竖带判定，见 {@link #isInSideMiddleStrip}。
+     */
+    public static boolean isInCenterSquare(UseOnContext context) {
+        double ratio = centerSquareRatio();
+        if (ratio <= 0.0D) {
+            return false;
+        }
+        // 面内相对坐标。顶/底面点击时，放置格(BlockPlaceContext)与被点方块的 x/z 相同，
+        // 所以这里直接用 getClickedPos() 即可。
+        BlockPos facePos = context.getClickedPos();
+        Vec3 loc = context.getClickLocation();
+        double fx = loc.x - facePos.getX();
+        double fz = loc.z - facePos.getZ();
+        double half = ratio / 2.0D;
+        return Math.abs(fx - 0.5D) <= half && Math.abs(fz - 0.5D) <= half;
+    }
+
+    /** 面内 u 坐标（与判定框共用同一套约定：南北面 u=x、东西面 u=z，见 PlacementGuideRenderer#mapFace）。 */
+    private static double faceLocalU(UseOnContext context) {
+        Direction face = context.getClickedFace();
+        BlockPos origin = context.getClickedPos();
+        Vec3 loc = context.getClickLocation();
+        return face.getAxis() == Direction.Axis.X ? loc.z - origin.getZ() : loc.x - origin.getX();
+    }
+
+    /**
      * 这次点击是否应该放竖半砖。
      *
      * <ul>
@@ -62,34 +106,53 @@ public final class SlabPlacementRules {
     }
 
     /**
-     * 侧面放竖楼梯时的朝向：按点击落在面内横向轴的左/右哪一半决定（上下无差别——
-     * 竖楼梯是通柱 L 形，高度方向没有变体）。L 形的“中心块”永远贴墙（= 被点的那一侧），
-     * 左右决定中心块靠墙侧的哪一头；映射到 FACING 用的是 StairBlockMixin#buildLShape
-     * 的中心象限表（NE→东、SE→南、SW→西、NW→北）。
+     * 侧面点击的台阶竖放朝向（三条竖带，与判定框画的两条竖线一一对应）：
+     * 左带（u&lt;1/3）=放置格靠面内横轴负端那半、右带（u≥2/3）=正端那半
+     * （南北面→西/东半，东西面→北/南半）；中间带是原版平放区，不走这里。
      *
-     * <p>面内横向轴取「与 UP 叉乘」的方向（北面→东、东面→南、南面→西、西面→北），
-     * 与判定框画线用的坐标系一致。整个侧面都是可点区（上下左右都可），
-     * 顶/底面仍按中央正方形判定——这正是默认档“侧面放置”增强（参考项目只支持顶/底面）。
+     * <p>上下位置不参与判定（竖带贯穿整个面高）。面内坐标与判定框共用同一套约定：
+     * 南北面 u=x、东西面 u=z（见 PlacementGuideRenderer#mapFace）——
+     * 这是默认档“侧面放置”增强（参考项目只支持顶/底面）。
+     */
+    public static Orientation verticalForSideFace(UseOnContext context) {
+        Direction face = context.getClickedFace();
+        double u = faceLocalU(context);
+        boolean negative = u < SIDE_STRIP_EDGE;   // 左带；右带 u ≥ 2/3（中间带由调用方走原版）
+        if (face.getAxis() == Direction.Axis.X) {
+            // 东西面：u=z，负端=北半、正端=南半
+            return negative
+                    ? new Orientation(VerticalSlabMode.VERTICAL_NS, SlabType.BOTTOM)
+                    : new Orientation(VerticalSlabMode.VERTICAL_NS, SlabType.TOP);
+        }
+        // 南北面：u=x，负端=西半、正端=东半
+        return negative
+                ? new Orientation(VerticalSlabMode.VERTICAL_EW, SlabType.BOTTOM)
+                : new Orientation(VerticalSlabMode.VERTICAL_EW, SlabType.TOP);
+    }
+
+    /**
+     * 侧面放竖楼梯时的朝向（三条竖带，与判定框画的两条竖线一一对应）：
+     * L 形中心固定贴墙（被点面的反侧），左/右带决定中心的横向分量
+     * （南北面 u=x→西/东，东西面 u=z→北/南），再按 StairBlockMixin#buildLShape
+     * 的中心表映射到 FACING（NE→东、SE→南、SW→西、NW→北）。
+     * 中间带是原版平放区，不走这里。
+     *
+     * <p>上下位置不参与判定（竖带贯穿整个面高）——
+     * 这是默认档“侧面放置”增强（参考项目只支持顶/底面）。
      */
     public static Direction verticalStairFacingForSideFace(UseOnContext context) {
         Direction face = context.getClickedFace();
-        Direction lateral = face.getClockWise();     // 面内横向轴
-        Direction wallSide = face.getOpposite();     // 放置格里贴墙的那一侧
+        double u = faceLocalU(context);
 
-        BlockPos origin = context.getClickedPos();
-        Vec3 loc = context.getClickLocation();
-        // 点击位置沿横向轴的分量（0=轴负端、1=轴正端）
-        double lateralPos = switch (lateral) {
-            case EAST -> loc.x - origin.getX();
-            case SOUTH -> loc.z - origin.getZ();
-            case WEST -> origin.getX() + 1.0D - loc.x;
-            default -> origin.getZ() + 1.0D - loc.z; // NORTH
-        };
-        Direction lateralSide = lateralPos < 0.5D ? lateral.getOpposite() : lateral;
+        // L 形中心的横向分量：左带=面内横轴负端、右带=正端（南北面→西/东，东西面→北/南）
+        Direction lateralSide = face.getAxis() == Direction.Axis.X
+                ? (u < SIDE_STRIP_EDGE ? Direction.NORTH : Direction.SOUTH)
+                : (u < SIDE_STRIP_EDGE ? Direction.WEST : Direction.EAST);
+        // 纵深分量固定贴墙（被点面的反侧）
+        Direction depthSide = face.getOpposite();
 
-        // 中心象限：横向轴是 X 时 centerX=左右选择、centerZ=墙侧；是 Z 时对调
-        Direction centerX = lateral.getAxis() == Direction.Axis.X ? lateralSide : wallSide;
-        Direction centerZ = lateral.getAxis() == Direction.Axis.X ? wallSide : lateralSide;
+        Direction centerX = lateralSide.getAxis() == Direction.Axis.X ? lateralSide : depthSide;
+        Direction centerZ = lateralSide.getAxis() == Direction.Axis.X ? depthSide : lateralSide;
         if (centerZ == Direction.SOUTH) {
             return centerX == Direction.EAST ? Direction.SOUTH : Direction.WEST;
         }
@@ -121,22 +184,6 @@ public final class SlabPlacementRules {
             return x > 0 ? Direction.EAST : Direction.WEST;
         }
         return z > 0 ? Direction.SOUTH : Direction.NORTH;
-    }
-
-    /** 点击位置是否落在被点方块面的中央正方形内。 */
-    public static boolean isInCenterSquare(UseOnContext context) {
-        double ratio = centerSquareRatio();
-        if (ratio <= 0.0D) {
-            return false;
-        }
-        // 面内相对坐标。顶/底面点击时，放置格(BlockPlaceContext)与被点方块的 x/z 相同，
-        // 所以这里直接用 getClickedPos() 即可，两种情况都对。
-        BlockPos facePos = context.getClickedPos();
-        Vec3 loc = context.getClickLocation();
-        double fx = loc.x - facePos.getX();
-        double fz = loc.z - facePos.getZ();
-        double half = ratio / 2.0D;
-        return Math.abs(fx - 0.5D) <= half && Math.abs(fz - 0.5D) <= half;
     }
 
     /** 配置里的中央正方形边长比例；读取失败时按默认 0.5 处理。 */

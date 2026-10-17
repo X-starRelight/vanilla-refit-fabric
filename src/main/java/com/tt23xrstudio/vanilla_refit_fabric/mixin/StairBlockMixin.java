@@ -79,10 +79,11 @@ public abstract class StairBlockMixin {
         BlockPos pos = context.getClickedPos();
         Direction clickedFace = context.getClickedFace();
 
-        // 默认档（README「默认」）：点顶/底面的中央正方形内 → 楼梯按原版平放，
-        // 正方形之外才竖放（与台阶共用 slabCenterSquareRatio，见 SlabPlacementRules）。
-        if ((clickedFace == Direction.UP || clickedFace == Direction.DOWN)
-                && SlabPlacementRules.isInCenterSquare(context)) {
+        // 默认档（README「默认」）：顶/底面中央正方形内、侧面中间竖带内 → 楼梯按原版平放，
+        // 其余区域才竖放（与台阶共用判定，见 SlabPlacementRules）。
+        boolean horizontalFace = clickedFace == Direction.UP || clickedFace == Direction.DOWN;
+        if (horizontalFace ? SlabPlacementRules.isInCenterSquare(context)
+                : SlabPlacementRules.isInSideMiddleStrip(context)) {
             return original;
         }
 
@@ -106,7 +107,8 @@ public abstract class StairBlockMixin {
                     .setValue(StairBlock.SHAPE, conn.toShape()), fluidType);
         } else {
             // 侧面（默认档增强，参考项目只支持顶/底面）：竖楼梯贴着被点的那个面放置，
-            // 整个侧面都是可点区；左右两半决定朝向（上下无差别——L 形是通柱）。
+            // 左/右竖带决定朝向（L 形中心贴墙，左右决定中心的横向分量）。
+            // 中间竖带已在上面按原版平放返回。
             Direction facing = SlabPlacementRules.verticalStairFacingForSideFace(context);
             StairConnection conn = getConnection(level, pos, facing);
             result = FluidHolder.with(original

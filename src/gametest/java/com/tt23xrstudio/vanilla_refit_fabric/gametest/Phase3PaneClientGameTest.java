@@ -10,6 +10,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -31,7 +34,9 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
  *   <li>孤立玻璃板：12 个部件全关 → 画原版那根棍（上下面断面、四面大面）；</li>
  *   <li>南北竖直面：三块玻璃板夹在两根石柱之间 → 每块都出上下两半的南北面片；</li>
  *   <li>三墙夹角：北 + 西两面 2 格高石墙 → 出西北角上面片 + 北/西上下半；</li>
- *   <li>铁栏杆同款三组，验证另一张贴图规则（大面与断面同一张）。</li>
+ *   <li>铁栏杆同款三组，验证另一张贴图规则（大面与断面同一张）；</li>
+ *   <li>悬空两块玻璃板互连：上下左右不靠任何完整方块，两块板必须像原版一样连成满高竖带
+ *       （修复“必须要接到完整方块上才可以自动连接”的 bug）。</li>
  * </ol>
  */
 public final class Phase3PaneClientGameTest implements FabricClientGameTest {
@@ -93,6 +98,13 @@ public final class Phase3PaneClientGameTest implements FabricClientGameTest {
             connection.waitForChunksRender();
             context.takeScreenshot(TestScreenshotOptions.of("phase3_bars_corner").withSize(640, 640));
 
+            // 悬空两板互连特写：不靠任何完整方块，两块板应连成一条满高竖带（原版语义）
+            teleport(context, connection, server, ox + 28, y + 4, oz + 6);
+            context.getInput().lookAt(new BlockPos(ox + 28, y + 3, oz + 2));
+            context.waitTicks(10);
+            connection.waitForChunksRender();
+            context.takeScreenshot(TestScreenshotOptions.of("phase3_pane_floating_pair").withSize(640, 640));
+
             // 竖直台阶 / 楼梯近景（石材质两款 + 橡木对照）
             teleport(context, connection, server, ox + 6, y + 1, oz + 12);
             context.getInput().lookAt(new BlockPos(ox + 6, y + 1, oz + 8));
@@ -106,6 +118,27 @@ public final class Phase3PaneClientGameTest implements FabricClientGameTest {
             context.waitTicks(10);
             connection.waitForChunksRender();
             context.takeScreenshot(TestScreenshotOptions.of("phase3_side_placement").withSize(640, 640));
+
+            // 侧面判定框特写（与顶面同构：中央正方形=平放区，外圈=竖放扇区）：
+            // 手持石台阶看石柱南面 → 应画“中央正方形 + 被截断的对角线 X”
+            server.runOnServer(s -> s.getPlayerList().getPlayers().get(0)
+                    .setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_SLAB)));
+            connection.waitForClientboundPackets();
+            teleport(context, connection, server, ox + 13.5, y + 1, oz + 11.5);
+            context.getInput().lookAt(new BlockPos(ox + 13, y + 1, oz + 8));
+            context.waitTicks(10);
+            connection.waitForChunksRender();
+            context.takeScreenshot(TestScreenshotOptions.of("phase3_guide_slab_side").withSize(640, 640));
+
+            // 手持石楼梯看石柱东面 → 应画“中央正方形 + 被截断的十字”
+            server.runOnServer(s -> s.getPlayerList().getPlayers().get(0)
+                    .setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COBBLESTONE_STAIRS)));
+            connection.waitForClientboundPackets();
+            teleport(context, connection, server, ox + 16.5, y + 1, oz + 8.5);
+            context.getInput().lookAt(new BlockPos(ox + 13, y + 1, oz + 8));
+            context.waitTicks(10);
+            connection.waitForChunksRender();
+            context.takeScreenshot(TestScreenshotOptions.of("phase3_guide_stair_side").withSize(640, 640));
 
             context.getInput().pressKey(options -> options.keyToggleGui);   // 复原 HUD
             context.restoreDefaultGameOptions();
@@ -141,6 +174,14 @@ public final class Phase3PaneClientGameTest implements FabricClientGameTest {
         set(level, ox + 24, y + 2, oz + 1, Blocks.STONE);
         set(level, ox + 23, y + 1, oz + 2, Blocks.STONE);
         set(level, ox + 23, y + 2, oz + 2, Blocks.STONE);
+
+        // —— 悬空两块玻璃板互连（规则 3 回归场景：不靠任何完整方块也必须连上）——
+        // setBlock 直放不会重算自己：先放 A、再放 B（B 触发 A 的 updateShape），
+        // B 自己再借一块临时脚手架触发重算，最后拆掉脚手架 → 两块板完全悬空
+        set(level, ox + 28, y + 3, oz + 2, Blocks.GLASS_PANE);                   // 板 A（悬空）
+        set(level, ox + 28, y + 3, oz + 3, Blocks.GLASS_PANE);                   // 板 B（A 正南，触发 A 重算）
+        set(level, ox + 28, y + 4, oz + 3, Blocks.STONE);                        // 临时脚手架：触发 B 重算
+        set(level, ox + 28, y + 4, oz + 3, Blocks.AIR);                          // 拆掉脚手架 → 完全悬空
 
         // —— 竖直台阶 / 竖直楼梯（非橡木材质：验证模板几何 + 运行时换图） ——
         // 竖直台阶（南北向）：石台阶竖起来，贴图应是石头而不是橡木、更不是纯色
@@ -178,17 +219,17 @@ public final class Phase3PaneClientGameTest implements FabricClientGameTest {
                                 net.minecraft.world.level.block.state.properties.SlabType.BOTTOM),
                 3);
 
-        // —— 侧面放置（默认档增强，参考项目没有）：贴面竖台阶 + 贴面竖楼梯 ——
-        // 石柱 2 高；西面贴一块竖台阶（东半贴墙 = VERTICAL_EW+TOP）；
-        // 北面贴一座竖楼梯（对应“点北面左半” → FACING=WEST）
+        // —— 侧面放置（默认档增强，参考项目没有）：左竖带贴的竖台阶 + 左竖带贴的竖楼梯 ——
+        // 石柱 2 高；西面左带（u=z 负端）贴一块竖台阶（占北半 = VERTICAL_NS+BOTTOM）；
+        // 北面左带（u=x 负端）贴一座竖楼梯（FACING=WEST）
         set(level, ox + 13, y + 1, oz + 8, Blocks.STONE);
         set(level, ox + 13, y + 2, oz + 8, Blocks.STONE);
         level.setBlock(new BlockPos(ox + 12, y + 1, oz + 8),
                 Blocks.STONE_SLAB.defaultBlockState()
                         .setValue(com.tt23xrstudio.vanilla_refit_fabric.util.ModBlockStateProperties.MODE,
-                                com.tt23xrstudio.vanilla_refit_fabric.util.VerticalSlabMode.VERTICAL_EW)
+                                com.tt23xrstudio.vanilla_refit_fabric.util.VerticalSlabMode.VERTICAL_NS)
                         .setValue(net.minecraft.world.level.block.SlabBlock.TYPE,
-                                net.minecraft.world.level.block.state.properties.SlabType.TOP),
+                                net.minecraft.world.level.block.state.properties.SlabType.BOTTOM),
                 3);
         level.setBlock(new BlockPos(ox + 13, y + 1, oz + 7),
                 Blocks.STONE_STAIRS.defaultBlockState()

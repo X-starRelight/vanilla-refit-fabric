@@ -122,13 +122,18 @@ public abstract class SlabBlockMixin {
         Direction clickedFace = context.getClickedFace();
         BlockState newState;
 
-        // 逻辑 3：紧贴点击的那个面放置（点顶面=下台阶，点北面=南竖台阶……）。
-        // 默认档：点侧面也走同一套贴面竖放——整个侧面都是可点区（上下左右都可），
-        // 顶/底面仍按中央正方形判定（见下面的 wantsVertical 分支）。
+        // 逻辑 3：紧贴点击的那个面放置（点顶面=下台阶，点北面=南竖台阶……），无中央正方形。
+        // 默认档：顶/底面按中央正方形判定（正方形内平放、外圈竖放）；侧面是三条竖带——
+        // 左带/右带竖放（放置格靠面内横轴负/正端那半），中间带原版平放（落在放置格下半）。
         // 参考项目默认档侧面不做竖放，这是按玩家反馈加的增强。
         boolean horizontalFace = clickedFace == Direction.UP || clickedFace == Direction.DOWN;
-        if (placementMode == PlacementMode.MOD_3 || (placementMode == PlacementMode.MOD && !horizontalFace)) {
+        if (placementMode == PlacementMode.MOD_3) {
             SlabPlacementRules.Orientation orientation = SlabPlacementRules.flushAgainst(clickedFace);
+            newState = FluidHolder.with(original.setValue(ModBlockStateProperties.MODE, orientation.mode())
+                    .setValue(SlabBlock.TYPE, orientation.type()), fluidType);
+        } else if (placementMode == PlacementMode.MOD && !horizontalFace
+                && !SlabPlacementRules.isInSideMiddleStrip(context)) {
+            SlabPlacementRules.Orientation orientation = SlabPlacementRules.verticalForSideFace(context);
             newState = FluidHolder.with(original.setValue(ModBlockStateProperties.MODE, orientation.mode())
                     .setValue(SlabBlock.TYPE, orientation.type()), fluidType);
         }

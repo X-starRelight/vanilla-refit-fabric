@@ -37,7 +37,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  *         楼梯画十字（+，四个象限决定 FACING）；</li>
  *     <li>面中央的正方形是“原版平放区”：分割线在正方形处截断，正方形边框本身也画出来
  *         （正方形占比见配置 {@code slabCenterSquareRatio}）；</li>
- *     <li>侧面（默认档）：台阶不画线（整个侧面贴面竖放，上下左右都可）；楼梯画竖中线（左右两半定朝向）；</li>
+ *     <li>侧面：两条竖线把面分成三条竖带——左带/右带竖放、中间带原版平放（台阶与楼梯同款）；</li>
  * </ul>
  *
  * <p><b>判定看的是“这个面是不是完整面”，不是“方块是不是整方块”。</b>做法与源项目一致：
@@ -72,25 +72,28 @@ public final class PlacementGuideRenderer {
     /** 用来把“整张面”做成一片极薄的形状再做差集；取 1/1000 格，远小于任何具体形状。 */
     private static final double FACE_EPS = 1.0E-3;
 
-    /** 台阶：两条对角线（X 分割），单位 [0,1]。 */
+    /**
+     * 台阶：两条对角线（X 分割），单位 [0,1]。
+     * 顶/底面与侧面通用（侧面复用同一组，坐标约定见 PlacementGuideRenderer#mapFace）。
+     */
     private static final float[][] SLAB_EDGES = {
             {0F, 0F, 1F, 1F},
             {1F, 0F, 0F, 1F},
     };
 
-    /** 楼梯：十字分割（+），单位 [0,1]。 */
+    /** 楼梯：十字分割（+），单位 [0,1]；顶/底面与侧面通用。 */
     private static final float[][] STAIR_EDGES = {
             {0.5F, 0F, 0.5F, 1F},
             {0F, 0.5F, 1F, 0.5F},
     };
 
     /**
-     * 楼梯侧面的竖中线，单位 [0,1]（映射到该面的两个轴：横向、纵向）。
-     * 侧面左右两半决定竖楼梯的朝向（见 SlabPlacementRules#verticalStairFacingForSideFace）；
-     * 台阶侧面整面都是贴面竖放区，不画任何线。
+     * 侧面：两条竖线把面分成三条竖带（左带/右带竖放、中间带原版平放），
+     * 台阶与楼梯同款。分界与 SlabPlacementRules 的 SIDE_STRIP_* 常量一致。
      */
-    private static final float[][] STAIR_SIDE_EDGE = {
-            {0.5F, 0F, 0.5F, 1F},
+    private static final float[][] SIDE_EDGES = {
+            {(float) SlabPlacementRules.SIDE_STRIP_EDGE, 0F, (float) SlabPlacementRules.SIDE_STRIP_EDGE, 1F},
+            {(float) SlabPlacementRules.SIDE_STRIP_EDGE_2, 0F, (float) SlabPlacementRules.SIDE_STRIP_EDGE_2, 1F},
     };
 
     /**
@@ -180,12 +183,9 @@ public final class PlacementGuideRenderer {
             return true;
         }
 
+        // 线组：顶/底面画“被中央正方形截断”的分割线（台阶对角线 X、楼梯十字）加正方形边框；
+        // 侧面画两条竖线（三条竖带：左/右=竖放、中间=原版平放，台阶楼梯同款）。
         boolean horizontalFace = face == Direction.UP || face == Direction.DOWN;
-
-        // 选好要画的线组：默认档的水平面画“被中央正方形截断”的分割线
-        // （台阶为对角线、楼梯为十字）加上正方形边框。
-        // 侧面（默认档增强）：台阶整面都是贴面竖放区（上下左右都可），不画线；
-        // 楼梯只有左右两半决定朝向，画竖中线。
         float[][] first;
         float[][] second = null;
         if (horizontalFace) {
@@ -193,10 +193,7 @@ public final class PlacementGuideRenderer {
             first = slab ? cachedTruncatedDiagonals : cachedTruncatedCross;
             second = cachedSquare;
         } else {
-            if (slab) {
-                return true;
-            }
-            first = STAIR_SIDE_EDGE;
+            first = SIDE_EDGES;
         }
 
         // 与原版外框相同的坐标基准：pose 是 submitFeatures 的恒等 pose，
