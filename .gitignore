@@ -49,6 +49,7 @@ repo/
 ### 参考项目克隆与本地构建/调试输出 ###
 /vanilla-refit/
 /build-*.txt
+/build_*.txt
 /runclient-log.txt
 
 ### Docs ###
