@@ -11,7 +11,8 @@
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase2GameTest",
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase2SymmetryGameTest",
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase3GameTest",
-      "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase3PaneGameTest"
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase3PaneGameTest",
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.GlassMiningTagGameTest"
     ],
     "fabric-client-gametest": [
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase3PaneClientGameTest"
