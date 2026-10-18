@@ -19,14 +19,6 @@ loom {
 		}
 	}
 
-	runs {
-		client {
-			// 本机 16GB 内存：JVM 默认堆 = 物理内存 1/4（4GB），叠加系统其它程序后
-			// Windows 提交内存被耗尽，进世界时原生内存/GPU 分配都会失败。标题界面
-			// 基线测量只用 ~350MB，3G 堆足够跑世界，给系统留出余量。
-			vmArg "-Xmx3G"
-		}
-	}
 }
 
 dependencies {
@@ -58,16 +50,6 @@ fabricApi {
 		// 有头测试：真开客户端、真建世界、真渲染再截图对比（阶段里程碑验收用）
 		enableClientGameTests = true
 		eula = true
-	}
-}
-
-// 有头测试的 run：真开客户端。本机内存吃紧（资源重载期原生分配失败过一次），
-// 这个 run 单独把堆上限压到 2G，给窗口 / GPU / JVM 内部分配留余量。
-loom {
-	runs {
-		clientGameTest {
-			vmArg "-Xmx2G"
-		}
 	}
 }
 
