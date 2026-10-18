@@ -38,6 +38,10 @@ public abstract class AnvilMenuMixin {
 
     // ===== 2. 检测是否走材料修复分支 =====
     // 26.2 已无 Item.isValidRepairItem 双参版，现行是 ItemStack 单参版（组件 REPAIRABLE）
+    /**
+     * 该注入点为独占式（{@code @Redirect} 独占该调用点），换取与源项目写法一致；
+     * 若未来与其它修改铁砧修复判定的模组发生冲突，可换用 {@code @WrapOperation} 改为协作式包裹。
+     */
     @Redirect(method = "createResult",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/world/item/ItemStack;isValidRepairItem(Lnet/minecraft/world/item/ItemStack;)Z"),
