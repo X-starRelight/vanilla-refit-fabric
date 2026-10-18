@@ -23,7 +23,9 @@
     "BlockStateSymmetryMixin",
     "PaneCornerShapeMixin",
     "PaneIndirectNeighbourMixin",
-    "LevelChunkPostProcessMixin"
+    "LevelChunkPostProcessMixin",
+    "AnvilMenuMixin",
+    "AnvilNoWearMixin"
   ],
   "injectors": {
     "defaultRequire": 1
