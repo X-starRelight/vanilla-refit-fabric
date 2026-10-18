@@ -1,6 +1,7 @@
 package com.tt23xrstudio.vanilla_refit_fabric.compat;
 
 import com.tt23xrstudio.vanilla_refit_fabric.ModBlocks;
+import com.tt23xrstudio.vanilla_refit_fabric.VanillaRefitFabric;
 import com.tt23xrstudio.vanilla_refit_fabric.block.entity.MixedSlabBlockEntity;
 import com.tt23xrstudio.vanilla_refit_fabric.util.FluidHolder;
 import com.tt23xrstudio.vanilla_refit_fabric.util.FluidType;
@@ -26,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -43,24 +45,30 @@ import java.util.Map;
  * （{@code ServerTickEvents.END_LEVEL_TICK}）再落盘——机械动力自己也在处理镜像，
  * 等 tick 结束就跟双方的处理顺序无关了。
  *
- * <p>这里用反射调用机械动力的 {@code SymmetryWandItem#getMirror} 与
- * {@code SymmetryMirror#process(BlockPos, BlockState)}（后者就是它自己算镜像目标格用的公开方法），
- * 为的是不给本模组增加机械动力的编译依赖；机械动力不在、或哪天方法改名，这里会静默关闭，
- * 只影响这一条兼容，不影响其它功能。
+ * <p>机械动力（飞跃版，Fabric 版的机械动力就是它）的包根是 {@code com.zurrtum}，
+ * 镜像目标格的算法在 {@code SymmetryMirror#process(BlockPos, Pair)}——
+ * 返回 {@code Pair<放置方向, 镜像状态>} 的表（原版 Create 那边是直接传 BlockState）。
+ *
+ * <p>这里全程反射调用，为的是不给本模组增加机械动力的编译依赖；机械动力不在、
+ * 或哪天方法改名，这里会打一条警告日志后关闭，只影响这一条兼容，不影响其它功能。
  */
 public final class CreateSymmetryCompat {
 
     private static final String CREATE_MOD_ID = "create";
     private static final String WAND_ITEM_ID = "create:wand_of_symmetry";
     private static final String WAND_CLASS =
-            "com.simibubi.create.content.equipment.symmetryWand.SymmetryWandItem";
+            "com.zurrtum.create.content.equipment.symmetryWand.SymmetryWandItem";
     private static final String MIRROR_CLASS =
-            "com.simibubi.create.content.equipment.symmetryWand.mirror.SymmetryMirror";
+            "com.zurrtum.create.infrastructure.component.SymmetryMirror";
+    /** 飞跃版 {@code process} 的第二参数类型：{@code Pair<放置方向, 镜像状态>}。 */
+    private static final String PAIR_CLASS = "com.zurrtum.create.catnip.data.Pair";
 
     /** 反射一次就缓存；失败（机械动力改接口）后不再重试。 */
     private static boolean reflectionFailed;
     private static Method getMirrorMethod;
     private static Method processMethod;
+    private static Method pairOfMethod;
+    private static Method pairSecondMethod;
 
     /** 待写入的材质搬运（本 tick 结束、镜像目标格确实落位后再写）。 */
     private static final ArrayDeque<Copy> PENDING = new ArrayDeque<>();
@@ -456,12 +464,25 @@ public final class CreateSymmetryCompat {
         try {
             Class<?> wandClass = Class.forName(WAND_CLASS);
             Class<?> mirrorClass = Class.forName(MIRROR_CLASS);
+            Class<?> pairClass = Class.forName(PAIR_CLASS);
             getMirrorMethod = wandClass.getMethod("getMirror", ItemStack.class);
-            processMethod = mirrorClass.getMethod("process", BlockPos.class, BlockState.class);
+            processMethod = mirrorClass.getMethod("process", BlockPos.class, pairClass);
+            pairOfMethod = pairClass.getMethod("of", Object.class, Object.class);
+            pairSecondMethod = pairClass.getMethod("getSecond");
+            VanillaRefitFabric.LOGGER.info("[原版精修] 对称之杖兼容已接入机械动力（飞跃版）");
             return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
-            reflectionFailed = true;
+            disableReflection("接入飞跃版接口", e);
             return false;
+        }
+    }
+
+    /** 反射失败：只记一次日志并永久关闭本兼容。 */
+    private static void disableReflection(String where, Exception e) {
+        if (!reflectionFailed) {
+            reflectionFailed = true;
+            VanillaRefitFabric.LOGGER.warn(
+                    "[原版精修] 对称之杖兼容反射失败（{}），本条兼容已关闭：{}", where, e.toString());
         }
     }
 
@@ -470,18 +491,33 @@ public final class CreateSymmetryCompat {
         try {
             return getMirrorMethod.invoke(null, wand);
         } catch (ReflectiveOperationException | RuntimeException e) {
-            reflectionFailed = true;
+            disableReflection("调用 getMirror", e);
             return null;
         }
     }
 
+    /**
+     * 飞跃版入口：{@code process(BlockPos, Pair)} → {@code Map<BlockPos, Pair>}。
+     * Pair 的方向位对我们无意义（探针要回读的是镜像后的<b>状态</b>），随便塞个方向；
+     * 出参把每格的 {@code pair.getSecond()}（镜像后的状态）解出来，调用方按老接口用。
+     */
     @Nullable
     @SuppressWarnings("unchecked")
     private static Map<BlockPos, BlockState> invokeProcess(Object mirror, BlockPos pos, BlockState state) {
         try {
-            return (Map<BlockPos, BlockState>) processMethod.invoke(mirror, pos, state);
+            Object pair = pairOfMethod.invoke(null, Direction.DOWN, state);
+            Map<?, ?> raw = (Map<?, ?>) processMethod.invoke(mirror, pos, pair);
+            if (raw == null) {
+                return null;
+            }
+            Map<BlockPos, BlockState> out = new HashMap<>();
+            for (Map.Entry<?, ?> entry : raw.entrySet()) {
+                out.put((BlockPos) entry.getKey(),
+                        (BlockState) pairSecondMethod.invoke(entry.getValue()));
+            }
+            return out;
         } catch (ReflectiveOperationException | RuntimeException e) {
-            reflectionFailed = true;
+            disableReflection("调用 process", e);
             return null;
         }
     }

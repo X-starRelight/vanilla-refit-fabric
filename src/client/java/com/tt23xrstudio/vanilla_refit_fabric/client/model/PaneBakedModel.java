@@ -1,6 +1,8 @@
 package com.tt23xrstudio.vanilla_refit_fabric.client.model;
 
 import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
+import com.tt23xrstudio.vanilla_refit_fabric.util.SlabOffset;
+import com.tt23xrstudio.vanilla_refit_fabric.util.SlabSupport;
 import java.util.List;
 import java.util.function.Predicate;
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
@@ -72,6 +74,35 @@ public final class PaneBakedModel extends WrapperBlockStateModel {
     @Override
     public void emitQuads(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos, BlockState state,
                           RandomSource random, Predicate<Direction> cullTest) {
+        // 板类贴台阶位移（自研增强，与服务端 PaneCornerShapeMixin 的形状位移同源同判）：
+        // 下方是下台阶 → 整体下移半格贴齐砖面；否则上方是上台阶 → 上移半格贴齐砖底。
+        // 不落属性、渲染期按邻居现算，所以同一个模型实例对"贴砖的"与"不贴砖的"板都能用。
+        SlabOffset offset = SlabSupport.offsetAt(level, pos);
+        if (offset == SlabOffset.NONE) {
+            emitPieces(emitter, level, pos, state, random, cullTest);
+            return;
+        }
+        boolean lower = offset == SlabOffset.LOWERED;
+        float shiftY = lower ? -0.5F : 0.5F;
+        // 剔除救援（与 SlabbedLoweringModel/SlabbedRaisingModel 同理）：位移后原本贴着相邻方块、
+        // 带 cullface 的那组面（下移 → 原 up 面；上移 → 原 down 面）不再贴合，强制放出，避免缺面。
+        Direction rescue = lower ? Direction.UP : Direction.DOWN;
+        emitter.pushTransform(quad -> {
+            for (int i = 0; i < 4; i++) {
+                quad.pos(i, quad.x(i), quad.y(i) + shiftY, quad.z(i));
+            }
+            if (quad.cullFace() == rescue) {
+                quad.cullFace(null);
+            }
+            return true;
+        });
+        emitPieces(emitter, level, pos, state, random, dir -> dir != rescue && cullTest.test(dir));
+        emitter.popTransform();
+    }
+
+    /** 按 12 个部件状态拼装 quad（原 {@link #emitQuads} 主体）。 */
+    private void emitPieces(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos, BlockState state,
+                            RandomSource random, Predicate<Direction> cullTest) {
         int mask = PaneCornerSupport.pieceMask(state);
         if (mask == 0) {
             // 一个部件都没启用 = 什么都没连：原版那根棍（post + 四个未连接方向的柱面）

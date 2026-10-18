@@ -5,7 +5,9 @@ import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -13,10 +15,14 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CrossCollisionBlock;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
@@ -145,9 +151,10 @@ public class Phase3PaneGameTest {
         requireTrue(helper, pane, ModBlockStateProperties.PANE_NORTH_WEST, false, "角面片不应被点亮");
 
         // 形状/碰撞箱跟着部件走：南北贯通（z 0~16 像素）、厚度 2 像素、满高
+        // 碰撞箱必须走三参重载：两参版返回按状态缓存的“位置无关”形状，测不到 mixin 的按位置修正
         BlockPos absPane = helper.absolutePos(PANE);
         VoxelShape shape = pane.getShape(level, absPane);
-        VoxelShape collision = pane.getCollisionShape(level, absPane);
+        VoxelShape collision = pane.getCollisionShape(level, absPane, CollisionContext.empty());
         require(helper, shape.min(Direction.Axis.Z) < 0.01, "面片形状应抵达北面 z=0，minZ=" + shape.min(Direction.Axis.Z));
         require(helper, shape.max(Direction.Axis.Z) > 0.99, "面片形状应抵达南面 z=1，maxZ=" + shape.max(Direction.Axis.Z));
         require(helper, shape.min(Direction.Axis.Y) < 0.01, "面片形状应落地 minY=0，minY=" + shape.min(Direction.Axis.Y));
@@ -353,6 +360,84 @@ public class Phase3PaneGameTest {
 
         require(helper, first == second || first.equals(second),
                 "两次放置应得到同一份状态：\n  第一次=" + first + "\n  第二次=" + second);
+
+        helper.succeed();
+    }
+
+    // ===== 板类贴半砖位移（自研增强：参考项目没有，不落属性、按邻居现算）=====
+
+    /**
+     * 玻璃板 / 铁栏杆 / 铜栏杆放在下半砖上：形状与碰撞箱整体下移半格贴齐砖面
+     * （本格坐标 -0.5~+0.5，原版是 0~1）；旁边没有台阶的板保持原样。
+     * 直接 setBlock 即可：位移是查询时按邻居现算的纯函数，不依赖放置路径。
+     */
+    @GameTest
+    public void paneOnBottomSlabShiftsDownHalf(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Block[] panes = {
+                Blocks.GLASS_PANE,
+                Blocks.IRON_BARS,
+                BuiltInRegistries.BLOCK.getValue(Identifier.fromNamespaceAndPath("minecraft", "copper_bars"))
+        };
+        for (int i = 0; i < panes.length; i++) {
+            require(helper, panes[i] != null, "铜栏杆应能从注册表取到");
+            BlockPos rel = new BlockPos(1 + i, 2, 1);
+            helper.setBlock(new BlockPos(1 + i, 1, 1), Blocks.STONE_SLAB.defaultBlockState());
+            helper.setBlock(rel, panes[i].defaultBlockState());
+
+            BlockPos abs = helper.absolutePos(rel);
+            BlockState pane = stateAt(helper, rel);
+            VoxelShape shape = pane.getShape(level, abs);
+            require(helper, shape.min(Direction.Axis.Y) < -0.49,
+                    panes[i] + " 在下半砖上应下移半格，minY=" + shape.min(Direction.Axis.Y));
+            require(helper, shape.max(Direction.Axis.Y) < 0.51,
+                    panes[i] + " 下移后顶面应在半格处，maxY=" + shape.max(Direction.Axis.Y));
+            VoxelShape collision = pane.getCollisionShape(level, abs, CollisionContext.empty());
+            require(helper, collision.min(Direction.Axis.Y) < -0.49,
+                    panes[i] + " 碰撞箱应同步下移，minY=" + collision.min(Direction.Axis.Y));
+        }
+
+        // 对照：旁边没有台阶的板保持原版 0~1
+        helper.setBlock(new BlockPos(4, 2, 1), Blocks.GLASS_PANE.defaultBlockState());
+        BlockPos control = helper.absolutePos(new BlockPos(4, 2, 1));
+        VoxelShape flat = stateAt(helper, new BlockPos(4, 2, 1)).getShape(level, control);
+        require(helper, flat.min(Direction.Axis.Y) > -0.01,
+                "无台阶时不应位移，minY=" + flat.min(Direction.Axis.Y));
+        require(helper, flat.max(Direction.Axis.Y) > 0.99,
+                "无台阶时形状应保持满高，maxY=" + flat.max(Direction.Axis.Y));
+
+        helper.succeed();
+    }
+
+    /**
+     * 玻璃板在上半砖下方：形状整体上移半格贴齐砖底（本格坐标 +0.5~+1.5）；
+     * 上方不是上半砖时不位移。
+     */
+    @GameTest
+    public void paneUnderTopSlabShiftsUpHalf(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.setBlock(new BlockPos(1, 3, 1),
+                Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP));
+        helper.setBlock(PANE, Blocks.GLASS_PANE.defaultBlockState());
+
+        BlockPos abs = helper.absolutePos(PANE);
+        VoxelShape shape = stateAt(helper, PANE).getShape(level, abs);
+        require(helper, shape.min(Direction.Axis.Y) > 0.49,
+                "上半砖下的玻璃板应上移半格，minY=" + shape.min(Direction.Axis.Y));
+        require(helper, shape.max(Direction.Axis.Y) > 1.49,
+                "上移后顶面应贴砖底 1.5，maxY=" + shape.max(Direction.Axis.Y));
+        VoxelShape collision = stateAt(helper, PANE).getCollisionShape(level, abs, CollisionContext.empty());
+        require(helper, collision.max(Direction.Axis.Y) > 1.49,
+                "碰撞箱应同步上移，maxY=" + collision.max(Direction.Axis.Y));
+
+        // 对照：上方没有上半砖时不位移
+        helper.setBlock(new BlockPos(3, 3, 1),
+                Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP));
+        helper.setBlock(new BlockPos(3, 2, 1), Blocks.GLASS_PANE.defaultBlockState());
+        BlockPos control = helper.absolutePos(new BlockPos(3, 2, 1));
+        VoxelShape flat = stateAt(helper, new BlockPos(3, 2, 1)).getShape(level, control);
+        require(helper, flat.min(Direction.Axis.Y) > -0.01,
+                "旁边没有上半砖的板不应位移，minY=" + flat.min(Direction.Axis.Y));
 
         helper.succeed();
     }

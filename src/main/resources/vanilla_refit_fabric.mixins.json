@@ -19,6 +19,7 @@
     "OnSlabPickBlockMixin",
     "BlockBehaviourSlabWallMixin",
     "IronBarsBlockMixin",
+    "BlockStateSymmetryMixin",
     "PaneCornerShapeMixin",
     "PaneIndirectNeighbourMixin",
     "LevelChunkPostProcessMixin"

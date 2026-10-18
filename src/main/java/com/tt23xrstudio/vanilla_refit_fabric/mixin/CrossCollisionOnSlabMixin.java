@@ -17,7 +17,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *
  * <p>栅栏继承了 CrossCollisionBlock 的 getShape / getCollisionShape（不覆写），
  * 所以形状位移要注入到基类；下台阶上的栅栏（btsdhz_slab_offset=lowered）下移半格、
- * 上台阶下的栅栏（raised）上移半格，铁栅栏等其它子类没有该属性，自然不会位移。
+ * 上台阶下的栅栏（raised）上移半格。铁栏杆/玻璃板/铜栏杆不带该属性，它们的位移走
+ * 另一条纯函数路径（{@link PaneCornerShapeMixin} 的服务端形状 + 客户端 PaneBakedModel
+ * 渲染期平移），本类不重复处理。
  */
 @Mixin(CrossCollisionBlock.class)
 public abstract class CrossCollisionOnSlabMixin {

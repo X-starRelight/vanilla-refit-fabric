@@ -36,7 +36,11 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
  *   <li>三墙夹角：北 + 西两面 2 格高石墙 → 出西北角上面片 + 北/西上下半；</li>
  *   <li>铁栏杆同款三组，验证另一张贴图规则（大面与断面同一张）；</li>
  *   <li>悬空两块玻璃板互连：上下左右不靠任何完整方块，两块板必须像原版一样连成满高竖带
- *       （修复“必须要接到完整方块上才可以自动连接”的 bug）。</li>
+ *       （修复“必须要接到完整方块上才可以自动连接”的 bug）；</li>
+ *   <li>板类贴半砖位移（自研增强）：下半砖上的玻璃板/铁栏杆/铜栏杆下移半格贴砖面，
+ *       上半砖下的玻璃板上移半格贴砖底；</li>
+ *   <li>镜像/旋转变换（对称之杖底层）：竖半砖贴北原态 / Z 轴镜像（应贴南）/ 顺时针转 90°
+ *       （应贴东），竖楼梯 L 中心西北原态 / X 轴镜像（应到东北）——形状必须跟着换。</li>
  * </ol>
  */
 public final class Phase3PaneClientGameTest implements FabricClientGameTest {
@@ -104,6 +108,20 @@ public final class Phase3PaneClientGameTest implements FabricClientGameTest {
             context.waitTicks(10);
             connection.waitForChunksRender();
             context.takeScreenshot(TestScreenshotOptions.of("phase3_pane_floating_pair").withSize(640, 640));
+
+            // 板类贴半砖位移特写：后排（z=8）上半砖下的板上移、前排（z=6）下半砖上的板下移
+            teleport(context, connection, server, ox + 27.5, y + 2, oz + 11);
+            context.getInput().lookAt(new BlockPos(ox + 27, y + 1, oz + 7));
+            context.waitTicks(10);
+            connection.waitForChunksRender();
+            context.takeScreenshot(TestScreenshotOptions.of("phase3_pane_on_slab").withSize(960, 480));
+
+            // 镜像/旋转变换特写：z=10 竖半砖三连（贴北/贴南/贴东）、z=12 竖楼梯两连（西北/东北）
+            teleport(context, connection, server, ox + 27.5, y + 2, oz + 15);
+            context.getInput().lookAt(new BlockPos(ox + 27, y + 1, oz + 11));
+            context.waitTicks(10);
+            connection.waitForChunksRender();
+            context.takeScreenshot(TestScreenshotOptions.of("phase3_mirror_transform").withSize(960, 480));
 
             // 竖直台阶 / 楼梯近景（石材质两款 + 橡木对照）
             teleport(context, connection, server, ox + 6, y + 1, oz + 12);
@@ -182,6 +200,43 @@ public final class Phase3PaneClientGameTest implements FabricClientGameTest {
         set(level, ox + 28, y + 3, oz + 3, Blocks.GLASS_PANE);                   // 板 B（A 正南，触发 A 重算）
         set(level, ox + 28, y + 4, oz + 3, Blocks.STONE);                        // 临时脚手架：触发 B 重算
         set(level, ox + 28, y + 4, oz + 3, Blocks.AIR);                          // 拆掉脚手架 → 完全悬空
+
+        // —— 板类贴半砖位移（自研增强：不落属性、按邻居现算）——
+        // 下半砖上（z=6 行）：玻璃板 / 铁栏杆各下移半格贴砖面，隔开放避免互相连接抢镜
+        set(level, ox + 26, y, oz + 6, Blocks.STONE_SLAB);                       // 下半砖（替换地板砖）
+        set(level, ox + 26, y + 1, oz + 6, Blocks.GLASS_PANE);                   // 玻璃板 → 下移半格
+        set(level, ox + 28, y, oz + 6, Blocks.STONE_SLAB);
+        set(level, ox + 28, y + 1, oz + 6, Blocks.IRON_BARS);                    // 铁栏杆 → 下移半格
+        // 上半砖下（z=8 行）+ 铜栏杆对照
+        level.setBlock(new BlockPos(ox + 28, y + 2, oz + 8),
+                Blocks.STONE_SLAB.defaultBlockState().setValue(net.minecraft.world.level.block.SlabBlock.TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.TOP), 3);   // 上半砖
+        set(level, ox + 28, y + 1, oz + 8, Blocks.GLASS_PANE);                   // 玻璃板 → 上移半格
+        set(level, ox + 26, y, oz + 8, Blocks.STONE_SLAB);
+        set(level, ox + 26, y + 1, oz + 8,
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(
+                        net.minecraft.resources.Identifier.fromNamespaceAndPath("minecraft", "copper_bars")));
+        // 铜栏杆 → 下移半格（WeatheringCopperBarsBlock extends IronBarsBlock，同一套管线）
+
+        // —— 镜像/旋转变换（BlockStateSymmetryMixin，对称之杖的底层）——
+        BlockState slabNorth = Blocks.STONE_SLAB.defaultBlockState()
+                .setValue(com.tt23xrstudio.vanilla_refit_fabric.util.ModBlockStateProperties.MODE,
+                        com.tt23xrstudio.vanilla_refit_fabric.util.VerticalSlabMode.VERTICAL_NS)
+                .setValue(net.minecraft.world.level.block.SlabBlock.TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.BOTTOM);
+        level.setBlock(new BlockPos(ox + 26, y + 1, oz + 10), slabNorth, 3);                      // 贴北原态
+        level.setBlock(new BlockPos(ox + 27, y + 1, oz + 10),
+                slabNorth.mirror(net.minecraft.world.level.block.Mirror.LEFT_RIGHT), 3);           // Z 轴镜像 → 贴南
+        level.setBlock(new BlockPos(ox + 28, y + 1, oz + 10),
+                slabNorth.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90), 3);       // 顺时针 90° → 贴东
+
+        // 竖楼梯：L 中心西北（facing 北）原态 / X 轴镜像后到东北（facing 东）
+        BlockState stairNw = Blocks.OAK_STAIRS.defaultBlockState()
+                .setValue(com.tt23xrstudio.vanilla_refit_fabric.util.ModBlockStateProperties.VERTICAL, true)
+                .setValue(net.minecraft.world.level.block.StairBlock.FACING, Direction.NORTH);
+        level.setBlock(new BlockPos(ox + 26, y + 1, oz + 12), stairNw, 3);
+        level.setBlock(new BlockPos(ox + 27, y + 1, oz + 12),
+                stairNw.mirror(net.minecraft.world.level.block.Mirror.FRONT_BACK), 3);
 
         // —— 竖直台阶 / 竖直楼梯（非橡木材质：验证模板几何 + 运行时换图） ——
         // 竖直台阶（南北向）：石台阶竖起来，贴图应是石头而不是橡木、更不是纯色
