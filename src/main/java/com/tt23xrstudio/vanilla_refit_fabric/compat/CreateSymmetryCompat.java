@@ -39,13 +39,12 @@ import java.util.Map;
  * {@code setBlockAndUpdate}：方块状态（MODE/TYPE）能镜像过去，但新格子的方块实体是新建的
  * 默认值，所以镜像出来的那一块看起来就是默认（石头+石头）材质的组合半砖。
  *
- * <p><b>放置侧</b>：机械动力的镜像钩子（飞跃版 ItemStackMixin）用的是
- * {@code BlockPlaceContext.getClickedPos()}——“直接点半砖朝空余面”时它指向的是旁边那格
- * <b>空气</b>（原版合并点击不算 canBeReplaced），机械动力根本看不到这次合并；“点相邻方块”
- * 时它能看到，创造模式会直接 {@code setBlockAndUpdate}（方块实体是新的，默认石头），
- * 生存模式却会因为背包里没有“组合半砖”物品而放弃。所以这里在 tick 末尾统一补位：
- * 机械动力已经落位的只补材质；没落位的（本模组自己把镜像组合半砖放下去，生存模式
- * 按机械动力的语义消耗一份新填的半砖，不白给材料）。
+ * <p><b>放置侧</b>：组合半砖没有对应物品，机械动力的镜像钩子（飞跃版 ItemStackMixin →
+ * {@code SymmetryWandItem#apply}）在原版 {@code BlockItem.BY_BLOCK} 白名单处就把它跳过；
+ * 同材质堆成的整块（平放/竖直 DOUBLE）则会被 {@code isUnobstructed} 挡死——镜像格里
+ * 已有第一块半砖的镜像，整格碰撞箱判定“被阻挡”。两者都由这里补位：tick 末尾统一落位
+ * （机械动力已经落位的只补材质），生存模式按机械动力的语义消耗一份新填的半砖，
+ * 不白给材料；客户端在点击瞬间先预测落位，避免组合半砖的材质晚到一帧闪默认石头。
  *
  * <p><b>拆除侧</b>：本模组在 {@code destroyBlock} 头部接管了组合半砖的破坏并取消原逻辑，
  * 机械动力挂在 {@code destroyBlock} 内部的拆除钩子因此<b>永远不会触发</b>。于是接管成功后
@@ -131,25 +130,44 @@ public final class CreateSymmetryCompat {
     }
 
     /**
-     * 本模组合并出组合半砖后调用（BlockItemMixin 混合填充成功处）：
-     * 若玩家拿着对称之杖，就把两块材质登记到所有镜像目标格，tick 末尾写入。
+     * 本模组“堆出一格整块”后调用（BlockItemMixin 填充成功处，同材质堆 DOUBLE 与
+     * 不同材质合并组合半砖都走这里）：若玩家拿着对称之杖，就把镜像搬运登记到所有
+     * 镜像目标格，tick 末尾写入（客户端则当场预测落位）。
      *
-     * @param sourcePos 实际填出组合半砖的那一格（情形 B 下是相邻格，不是点击格）
-     * @param addedSlab 本次合并新填进去的那块半砖（生存模式补位镜像时按它扣物品）
+     * <p>同材质整块（平放/竖直 DOUBLE）必须也走这里：机械动力自己的镜像放置会被
+     * {@code isUnobstructed} 挡死——镜像格里已经躺着第一块半砖的镜像，DOUBLE 的
+     * 碰撞箱是整格，判定“被阻挡”后直接跳过，镜像永远停在单半砖。放任不管的话，
+     * 之后潜行挖一半时 {@code isMirrorCounterpart} 找不到 DOUBLE 对应格，联动拆除
+     * 整条链路都会失效（表现为“挖掉一半，对称那边没反应”）。
+     *
+     * @param sourcePos 实际填出整块的那一格（情形 B 下是相邻格，不是点击格）
+     * @param addedSlab 本次堆叠新填进去的那块半砖（生存模式补位镜像时按它扣物品）
      */
     public static void onMergedSlabPlaced(Level level, BlockPos sourcePos, Block addedSlab, Player player) {
         if (reflectionFailed || !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded(CREATE_MOD_ID)) {
             return;
         }
-        if (level.isClientSide() || player == null) {
+        if (player == null) {
             return;
         }
         BlockState sourceState = level.getBlockState(sourcePos);
-        if (sourceState.getBlock() != ModBlocks.MERGED_SLAB) {
-            return;   // 只有“刚合并出来的组合半砖”需要搬材质
-        }
-        if (!(level.getBlockEntity(sourcePos) instanceof MixedSlabBlockEntity source) || isUnset(source)) {
-            return;
+        boolean merged = sourceState.getBlock() == ModBlocks.MERGED_SLAB;
+        Block first;
+        Block second;
+        if (merged) {
+            if (!(level.getBlockEntity(sourcePos) instanceof MixedSlabBlockEntity source) || isUnset(source)) {
+                return;
+            }
+            first = source.getFirstSlab();
+            second = source.getSecondSlab();
+        } else if (sourceState.getBlock() instanceof SlabBlock
+                && sourceState.hasProperty(SlabBlock.TYPE)
+                && sourceState.getValue(SlabBlock.TYPE) == SlabType.DOUBLE) {
+            // 同材质整块：两半是同一方块，材质就写在状态里（BE 分支对它自然跳过）
+            first = sourceState.getBlock();
+            second = first;
+        } else {
+            return;   // 不是刚堆出来的整块，没有要同步的东西
         }
         ItemStack wand = findWand(player);
         if (wand == null || !prepareReflection()) {
@@ -167,6 +185,7 @@ public final class CreateSymmetryCompat {
             return;
         }
 
+        boolean clientSide = level.isClientSide();
         Direction sourceSide = firstHalfSide(sourceState);
         for (Map.Entry<BlockPos, BlockState> entry : targets.entrySet()) {
             BlockPos targetPos = entry.getKey();
@@ -175,21 +194,61 @@ public final class CreateSymmetryCompat {
             }
             // A 永远代表“下/北/西”那半块（见渲染模型）。镜像后这半块的几何位置可能被换到
             // 另一侧，那就得把两块材质对调，否则上下（南北/东西）会反。
+            // （同材质整块 first==second，对调无影响。）
             boolean swap = mirroredFirstHalfSide(mirror, sourcePos, targetPos, sourceSide)
                     != firstHalfSide(entry.getValue());
-            PENDING.add(new Copy(level, targetPos.immutable(), entry.getValue(),
-                    swap ? source.getSecondSlab() : source.getFirstSlab(),
-                    swap ? source.getFirstSlab() : source.getSecondSlab(),
-                    addedSlab, player));
+            Copy copy = new Copy(level, targetPos.immutable(), entry.getValue(),
+                    swap ? second : first, swap ? first : second, addedSlab, player);
+            if (clientSide) {
+                // 客户端先行落位：镜像格的状态与材质当场就有了，服务端权威包到达时
+                // 状态一致、方块实体原样保留——组合半砖不会再闪一帧默认（石头）材质。
+                predictMirror(copy);
+            } else {
+                PENDING.add(copy);
+            }
+        }
+    }
+
+    /**
+     * 客户端预测：与服务端 {@link #applyPending} 同一套落位判定，点击瞬间就把镜像格
+     * 变成目标状态（组合半砖连同材质），不播音效（服务端 tick 末落位时会播，播两次会双响）。
+     *
+     * <p>与原版放置预测同一个契约：客户端先行、服务端权威。两边判定输入相同
+     * （同一份世界状态、同一面镜子、同一份背包视图），结果必然一致；
+     * 万一服务端最终没落位（极端竞态），残留的预测格也会在下次区块同步时被纠正。
+     */
+    private static void predictMirror(Copy copy) {
+        Level level = copy.level();
+        BlockPos pos = copy.pos();
+        BlockState current = level.getBlockState(pos);
+        if (current.getBlock() == ModBlocks.MERGED_SLAB) {
+            // 已经预测过（或收到过服务端落位）：只补缺失的材质，不重复放块
+            if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target && isUnset(target)) {
+                target.setBlocks(copy.first(), copy.second());
+            }
+            return;
+        }
+        if (!canMirrorInto(current, copy)) {
+            return;   // 被别的方块挡住了，与服务端判定一致
+        }
+        if (copy.player() != null && !copy.player().getAbilities().instabuild
+                && !consumeOne(copy.player(), copy.added())) {
+            return;   // 生存模式：背包里没有新填的那块半砖，不白给（与服务端一致）
+        }
+        if (!level.setBlock(pos, copy.mirroredState(), 3)) {
+            return;
+        }
+        if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target) {
+            target.setBlocks(copy.first(), copy.second());
         }
     }
 
     /**
      * 等这一 tick 结束时再写：这时机械动力的镜像方块无论先后都已经落位。
      *
-     * <p>机械动力已经把镜像格变成组合半砖的（点相邻方块 + 创造），只补材质；
-     * 没落位的（直接点半砖朝空余面——它的钩子拿到的是旁边空气格；以及生存模式
-     * 因为背包里没有“组合半砖”物品而放弃的），由本模组把镜像组合半砖放下去。
+     * <p>机械动力已经落位的（同材质整块、镜像格为空时创造模式能直接放的），只补组合
+     * 半砖缺失的材质；没落位的（组合半砖无物品、被白名单跳过；同材质整块被镜像格里
+     * 已有的单半砖挡住；生存模式背包里没有对应物品），由本模组自己落位。
      */
     private static void applyPending(Level tickedLevel) {
         for (Iterator<Copy> it = PENDING.iterator(); it.hasNext(); ) {
