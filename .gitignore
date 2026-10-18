@@ -53,6 +53,7 @@ repo/
 
 ### Docs ###
 docs/*
+!docs/compatibility.md
 
 ### 其他 ###
 create-fly/*

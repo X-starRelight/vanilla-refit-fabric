@@ -1,7 +1,9 @@
 package com.tt23xrstudio.vanilla_refit_fabric.mixin;
 
+import com.tt23xrstudio.vanilla_refit_fabric.VanillaRefitFabric;
 import com.tt23xrstudio.vanilla_refit_fabric.block.MixedSlabBlock;
 import com.tt23xrstudio.vanilla_refit_fabric.util.MixedSlabBreakHandler;
+import com.tt23xrstudio.vanilla_refit_fabric.util.PreBreakCapture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -40,8 +42,9 @@ public abstract class ServerPlayerGameModeMixin {
 
     @Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true, remap = false)
     private void vanillaRefit$breakMixedHalf(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-        // Fabric 的 PlayerBlockBreakEvents.BEFORE 已经跑过并被取消（保护插件等）：让位，不做任何接管
+        // Fabric 的 PlayerBlockBreakEvents.BEFORE 已经跑过并被取消：分流处理
         if (cir.isCancelled()) {
+            vanillaRefit$foreignHalfSplit(pos);
             return;
         }
         BlockState state = this.level.getBlockState(pos);
@@ -77,5 +80,39 @@ public abstract class ServerPlayerGameModeMixin {
             // 没接管成：退回整块掉落语义，别把镜像格的材料吞了
             com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.endBreak();
         }
+    }
+
+    /**
+     * 破坏事件被取消时的分流。
+     *
+     * <p>保护插件类取消：方块原地不动，照旧让位，什么都不做。
+     *
+     * <p>KleeSlabs 一类模组取消：它在事件里自己做了“拆一半”——双层半砖已被换成
+     * 同方块的单半砖（掉落也由它自己发）。本模组为它让位后，对称之杖的镜像格
+     * 就永远停在整块上（“挖掉一半，对称那边没反应”）。这里对比 {@link PreBreakCapture}
+     * 的破坏前快照识别这种外部半拆，补上镜像侧联动：镜像格拆掉、tick 末尾重建
+     * 保留的那半、掉落被拆的那半（与本模组自己半拆完全同一套语义）。
+     */
+    private void vanillaRefit$foreignHalfSplit(BlockPos pos) {
+        if (PreBreakCapture.STATE == null || !PreBreakCapture.POS.equals(pos)) {
+            return;   // 没有本次破坏的前置快照，无法判断，照旧让位
+        }
+        BlockState pre = PreBreakCapture.STATE;
+        if (!(pre.getBlock() instanceof SlabBlock) || !pre.hasProperty(SlabBlock.TYPE)
+                || pre.getValue(SlabBlock.TYPE) != SlabType.DOUBLE) {
+            return;   // 破坏前不是堆叠整块：保护插件等取消，照旧让位
+        }
+        BlockState current = this.level.getBlockState(pos);
+        if (current.getBlock() != pre.getBlock()
+                || !current.hasProperty(SlabBlock.TYPE)
+                || current.getValue(SlabBlock.TYPE) == SlabType.DOUBLE) {
+            return;   // 方块没被换成“同方块单半砖”：不是外部模组的半拆
+        }
+        VanillaRefitFabric.LOGGER.info("[VR-调试] 外部模组半拆 {}（事件取消、DOUBLE→单半砖），补镜像联动", pos);
+        // 镜像格：记账后拆掉，tick 末尾重建保留的那半并掉落被拆的那半
+        com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.beginBreak(
+                this.level, this.player, pos, pre, true);
+        com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.finishHalfBreak(
+                this.level, this.player, pos, current, pre.getBlock());
     }
 }

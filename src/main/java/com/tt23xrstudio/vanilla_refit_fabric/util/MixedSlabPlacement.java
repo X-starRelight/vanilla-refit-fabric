@@ -136,7 +136,11 @@ public final class MixedSlabPlacement {
         ParticleOrientation o1 = orientation(existing);
         BlockState mergedState = buildMergedState(o1.mode(), o1.type(), a, b, targetState, level, pos);
         if (level.setBlock(pos, mergedState, 3)) {
-            if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity mixed) {
+            // 方块实体拿不到时兜底补建（客户端个别时序下不即时创建，会闪一帧石头占位）
+            MixedSlabBlockEntity mixed = level.getBlockEntity(pos) instanceof MixedSlabBlockEntity be
+                    ? be
+                    : MixedSlabBlockEntity.ensure(level, pos, mergedState);
+            if (mixed != null) {
                 mixed.setBlocks(a, b);
             }
             level.playSound(null, pos, mergedState.getSoundType().getPlaceSound(), SoundSource.BLOCKS, 1.0F, 1.0F);

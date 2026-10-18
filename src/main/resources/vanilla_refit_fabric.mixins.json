@@ -7,6 +7,7 @@
     "StairBlockMixin",
     "BlockItemMixin",
     "ServerPlayerGameModeMixin",
+    "ServerPlayerGameModeBreakCaptureMixin",
     "BlockOnSlabStateMixin",
     "TorchOnSlabMixin",
     "RedstoneTorchOnSlabMixin",

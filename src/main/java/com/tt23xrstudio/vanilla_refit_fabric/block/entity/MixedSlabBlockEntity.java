@@ -1,6 +1,7 @@
 package com.tt23xrstudio.vanilla_refit_fabric.block.entity;
 
 import com.tt23xrstudio.vanilla_refit_fabric.ModBlockEntities;
+import com.tt23xrstudio.vanilla_refit_fabric.block.MixedSlabBlock;
 import com.tt23xrstudio.vanilla_refit_fabric.util.ClientHooks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -10,6 +11,7 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SlabBlock;
@@ -40,6 +42,25 @@ public class MixedSlabBlockEntity extends BlockEntity {
         return new MixedSlabBlockEntity(ModBlockEntities.MIXED_SLAB, pos, state);
     }
 
+    /**
+     * 兜底补建：setBlock 之后拿不到方块实体时显式创建一个。
+     *
+     * <p>正常情况 setBlock 会即时创建方块实体；个别客户端时序/环境下拿不到，组合半砖
+     * 会先按“无材质”渲染成石头占位，等服务端数据到达才恢复——表现为放置时闪一下石头。
+     * 已存在时原样返回，不做任何多余动作。
+     */
+    public static MixedSlabBlockEntity ensure(Level level, BlockPos pos, BlockState state) {
+        if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity be) {
+            return be;
+        }
+        if (!(state.getBlock() instanceof MixedSlabBlock)) {
+            return null;   // 只有组合半砖才有方块实体；原版 DOUBLE 等硬造会被 vanilla 状态校验拒绝（崩溃）
+        }
+        MixedSlabBlockEntity created = new MixedSlabBlockEntity(ModBlockEntities.MIXED_SLAB, pos, state);
+        level.getChunkAt(pos).setBlockEntity(created);
+        return level.getBlockEntity(pos) instanceof MixedSlabBlockEntity existing ? existing : created;
+    }
+
     public Block getSlabA() {
         return slabA;
     }
@@ -60,6 +81,11 @@ public class MixedSlabBlockEntity extends BlockEntity {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         }
         refreshClientModel();
+        if (level != null) {
+            com.tt23xrstudio.vanilla_refit_fabric.VanillaRefitFabric.LOGGER.info(
+                    "[VR-调试] 材质写入[{}]: {} a={} b={}",
+                    level.isClientSide() ? "客" : "服", worldPosition, slabA, slabB);
+        }
         return true;
     }
 
@@ -96,6 +122,10 @@ public class MixedSlabBlockEntity extends BlockEntity {
         this.slabA = readSlab(input.getStringOr("slab_a", ""));
         this.slabB = readSlab(input.getStringOr("slab_b", ""));
         refreshClientModel();
+        if (level != null && level.isClientSide()) {
+            com.tt23xrstudio.vanilla_refit_fabric.VanillaRefitFabric.LOGGER.info(
+                    "[VR-调试] 材质收包[客]: {} a={} b={}", worldPosition, slabA, slabB);
+        }
     }
 
     @Override

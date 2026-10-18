@@ -114,6 +114,11 @@ public final class CreateSymmetryCompat {
     private CreateSymmetryCompat() {
     }
 
+    /** 调试埋点：只在对称之杖相关动作时打印，量很小；排查完可整段删除。 */
+    private static void dbg(String format, Object... args) {
+        VanillaRefitFabric.LOGGER.info("[VR-调试] " + format, args);
+    }
+
     /** 注册 tick 末尾的延迟写入钩子（主类 onInitialize 里调一次）。 */
     public static void init() {
         ServerTickEvents.END_LEVEL_TICK.register(level -> {
@@ -156,6 +161,8 @@ public final class CreateSymmetryCompat {
         Block second;
         if (merged) {
             if (!(level.getBlockEntity(sourcePos) instanceof MixedSlabBlockEntity source) || isUnset(source)) {
+                dbg("登记[{}]: {} 组合半砖无方块实体/未设材质，跳过",
+                        level.isClientSide() ? "客" : "服", sourcePos);
                 return;
             }
             first = source.getFirstSlab();
@@ -171,22 +178,28 @@ public final class CreateSymmetryCompat {
         }
         ItemStack wand = findWand(player);
         if (wand == null || !prepareReflection()) {
+            dbg("登记[{}]: {} 手上/快捷栏无对称之杖（或反射失败），跳过",
+                    level.isClientSide() ? "客" : "服", sourcePos);
             return;
         }
         if (!invokeIsEnabled(wand)) {
+            dbg("登记[{}]: {} 杖处于关闭状态，跳过", level.isClientSide() ? "客" : "服", sourcePos);
             return;   // 杖被关掉了（机械动力自己这时也不镜像）
         }
         Object mirror = invokeGetMirror(wand);
         if (mirror == null) {
+            dbg("登记[{}]: {} 杖没有镜面，跳过", level.isClientSide() ? "客" : "服", sourcePos);
             return;
         }
         Map<BlockPos, BlockState> targets = invokeProcess(mirror, sourcePos, sourceState);
         if (targets == null) {
+            dbg("登记[{}]: {} process 返回空，跳过", level.isClientSide() ? "客" : "服", sourcePos);
             return;
         }
 
         boolean clientSide = level.isClientSide();
         Direction sourceSide = firstHalfSide(sourceState);
+        int queued = 0;
         for (Map.Entry<BlockPos, BlockState> entry : targets.entrySet()) {
             BlockPos targetPos = entry.getKey();
             if (targetPos.equals(sourcePos)) {
@@ -206,7 +219,11 @@ public final class CreateSymmetryCompat {
             } else {
                 PENDING.add(copy);
             }
+            queued++;
         }
+        dbg("登记[{}]: {} a={} b={} 目标={} 实际={} ({})",
+                clientSide ? "客" : "服", sourcePos, first, second,
+                targets.size(), queued, clientSide ? "预测" : "排队");
     }
 
     /**
@@ -225,21 +242,37 @@ public final class CreateSymmetryCompat {
             // 已经预测过（或收到过服务端落位）：只补缺失的材质，不重复放块
             if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target && isUnset(target)) {
                 target.setBlocks(copy.first(), copy.second());
+                dbg("预测: {} 已是组合半砖，补材质 a={} b={}", pos, copy.first(), copy.second());
             }
             return;
         }
         if (!canMirrorInto(current, copy)) {
+            dbg("预测: {} 被 {} 挡住，跳过", pos, current.getBlock());
             return;   // 被别的方块挡住了，与服务端判定一致
         }
         if (copy.player() != null && !copy.player().getAbilities().instabuild
                 && !consumeOne(copy.player(), copy.added())) {
+            dbg("预测: {} 背包缺 {}，不白给", pos, copy.added());
             return;   // 生存模式：背包里没有新填的那块半砖，不白给（与服务端一致）
         }
         if (!level.setBlock(pos, copy.mirroredState(), 3)) {
+            dbg("预测: {} setBlock 被拒", pos);
             return;
         }
-        if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target) {
-            target.setBlocks(copy.first(), copy.second());
+        if (copy.mirroredState().getBlock() == ModBlocks.MERGED_SLAB) {
+            // 组合半砖：需要方块实体存材质；客户端个别时序下不即时创建，兜底补建
+            MixedSlabBlockEntity target = level.getBlockEntity(pos) instanceof MixedSlabBlockEntity be
+                    ? be
+                    : MixedSlabBlockEntity.ensure(level, pos, copy.mirroredState());
+            if (target != null) {
+                target.setBlocks(copy.first(), copy.second());
+                dbg("预测落位: {} a={} b={}", pos, copy.first(), copy.second());
+            } else {
+                dbg("预测落位: {} 方块实体缺失，材质未写入", pos);
+            }
+        } else {
+            // 同材质整块（原版 DOUBLE）：材质在状态里，没有方块实体
+            dbg("预测落位: {} 同材质整块 {}", pos, copy.mirroredState().getBlock());
         }
     }
 
@@ -264,10 +297,12 @@ public final class CreateSymmetryCompat {
                 // 机械动力已落位：只补材质，已经有材质的不覆盖
                 if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target && isUnset(target)) {
                     target.setBlocks(copy.first(), copy.second());
+                    dbg("落位: {} 机械动力已放组合半砖，补材质 a={} b={}", pos, copy.first(), copy.second());
                 }
                 continue;
             }
             if (!canMirrorInto(current, copy)) {
+                dbg("落位: {} 被 {} 挡住，跳过", pos, current.getBlock());
                 continue;   // 被别的方块挡住了：不动它（与机械动力的 isUnobstructed 一致）
             }
             // 生存模式：机械动力的生存镜像要从背包找“组合半砖”物品（正常玩家不会有），
@@ -275,13 +310,27 @@ public final class CreateSymmetryCompat {
             // 不给白拿材料的口子。
             if (copy.player() != null && !copy.player().getAbilities().instabuild
                     && !consumeOne(copy.player(), copy.added())) {
+                dbg("落位: {} 背包缺 {}，不白给", pos, copy.added());
                 continue;
             }
             if (!level.setBlock(pos, copy.mirroredState(), 3)) {
+                dbg("落位: {} setBlock 被拒", pos);
                 continue;
             }
-            if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target) {
-                target.setBlocks(copy.first(), copy.second());
+            if (copy.mirroredState().getBlock() == ModBlocks.MERGED_SLAB) {
+                // 组合半砖：需要方块实体存材质（服务端 setBlock 会即时创建，兜底只为保险）
+                MixedSlabBlockEntity target = level.getBlockEntity(pos) instanceof MixedSlabBlockEntity be
+                        ? be
+                        : MixedSlabBlockEntity.ensure(level, pos, copy.mirroredState());
+                if (target != null) {
+                    target.setBlocks(copy.first(), copy.second());
+                    dbg("落位: {} a={} b={}", pos, copy.first(), copy.second());
+                } else {
+                    dbg("落位: {} 方块实体缺失，材质未写入", pos);
+                }
+            } else {
+                // 同材质整块（原版 DOUBLE）：材质在状态里，没有方块实体
+                dbg("落位: {} 同材质整块 {}", pos, copy.mirroredState().getBlock());
             }
             level.playSound(null, pos, copy.mirroredState().getSoundType().getPlaceSound(),
                     SoundSource.BLOCKS, 1.0F, 1.0F);
@@ -327,9 +376,12 @@ public final class CreateSymmetryCompat {
             }
             it.remove();
             if (!rebuild.level().getBlockState(rebuild.pos()).isAir()) {
+                dbg("重建跳过: {} 那边没被拆掉（没联动上）", rebuild.pos());
                 continue;   // 那边没被拆掉（没联动上），不能动它
             }
             rebuild.level().setBlock(rebuild.pos(), rebuild.state(), 3);
+            dbg("重建: {} 保留半砖={} TYPE={}", rebuild.pos(), rebuild.state().getBlock(),
+                    rebuild.state().getValue(SlabBlock.TYPE));
             rebuild.level().playSound(null, rebuild.pos(),
                     rebuild.hitBlock().defaultBlockState().getSoundType().getBreakSound(),
                     SoundSource.BLOCKS, 1.0F, 1.0F);
@@ -374,34 +426,42 @@ public final class CreateSymmetryCompat {
         }
         ItemStack wand = findWand(player);
         if (wand == null || !prepareReflection()) {
+            dbg("破坏登记: {} 快捷栏无对称之杖（或反射失败），不联动", pos);
             return;
         }
         if (!invokeIsEnabled(wand)) {
+            dbg("破坏登记: {} 杖处于关闭状态，不联动", pos);
             return;   // 杖被关掉了（机械动力自己这时也不镜像）
         }
         Object mirror = invokeGetMirror(wand);
         if (mirror == null) {
+            dbg("破坏登记: {} 杖没有镜面，不联动", pos);
             return;
         }
         Map<BlockPos, BlockState> mirrored = invokeProcess(mirror, pos, state);
         if (mirrored == null) {
+            dbg("破坏登记: {} process 返回空，不联动", pos);
             return;
         }
         ItemStack tool = player.getMainHandItem();
         boolean creative = player.getAbilities().instabuild;
         List<BlockPos> targets = new ArrayList<>(mirrored.size());
         List<List<ItemStack>> items = new ArrayList<>(mirrored.size());
+        int missed = 0;
         for (BlockPos targetPos : mirrored.keySet()) {
             if (targetPos.equals(pos)) {
                 continue;
             }
             BlockState targetState = level.getBlockState(targetPos);
             if (!isMirrorCounterpart(targetState, state)) {
-                continue;   // 那边不是对应的堆叠半砖，交给机械动力按原样处理
+                missed++;   // 那边不是对应的堆叠半砖，交给机械动力按原样处理
+                continue;
             }
             targets.add(targetPos.immutable());
             items.add(creative ? List.of() : collectSlabItems(level, targetPos, tool));
         }
+        dbg("破坏登记: {} 半拆={} 镜像候选={} 对应={} 非对应={}",
+                pos, halfBreak, mirrored.size() - 1, targets.size(), missed);
         if (targets.isEmpty()) {
             return;
         }
@@ -432,6 +492,7 @@ public final class CreateSymmetryCompat {
                                        BlockState keepState, Block hitBlock) {
         if (breakTargets == null || breakLevel != level || !breakIsHalf
                 || breakSourcePos == null || !breakSourcePos.equals(pos)) {
+            dbg("半拆收尾: {} 上下文不符（无登记/非半拆/位置变了），放弃联动", pos);
             clearBreakContext();
             return;
         }
@@ -447,6 +508,7 @@ public final class CreateSymmetryCompat {
                 .setValue(BlockStateProperties.FACING, keepSide);
         Map<BlockPos, BlockState> probeMirror = invokeProcess(mirror, pos, probe);
         if (probeMirror == null) {
+            dbg("半拆收尾: {} 探针 process 返回空，放弃联动", pos);
             return;
         }
         Block keepBlock = keepState.getBlock();
@@ -461,6 +523,8 @@ public final class CreateSymmetryCompat {
                     : keepSide;
             PENDING_REBUILDS.add(new Rebuild(level, targetPos, halfStateOf(keepBlock, side), removed, hitBlock));
         }
+        dbg("半拆收尾: {} 保留侧={} 重建={} 掉落={}",
+                pos, keepSide, targets.size(), removed.isEmpty() ? "无" : removed.getItem());
         // 机械动力的拆除钩子在被我们取消的 destroyBlock 里，永远不会触发；由我们直接把
         // 镜像格拆掉——tick 末尾的重建（上面，门卫是 isAir）才会把“保留的那一半”放回去。
         removeMirrorTargets(level, player, targets);
@@ -494,6 +558,7 @@ public final class CreateSymmetryCompat {
     /** 本次破坏结束（没接管成、事件被取消等）：清理上下文；半拆没走完就退回整块掉落，别把材料吞了。 */
     public static void endBreak() {
         if (breakTargets != null && breakIsHalf && breakTargetItems != null) {
+            dbg("破坏中止: {} 半拆没走完，镜像格按整块掉落补账", breakSourcePos);
             for (int i = 0; i < breakTargets.size(); i++) {
                 if (!breakTargetItems.get(i).isEmpty()) {
                     PENDING_DROPS.add(new Drop(breakLevel, breakTargets.get(i), breakTargetItems.get(i)));
