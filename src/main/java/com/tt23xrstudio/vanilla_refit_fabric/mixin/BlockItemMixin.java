@@ -67,13 +67,16 @@ public abstract class BlockItemMixin {
         // ---- 0. 统一的“半砖填充”判定：点击面朝向某个半砖的空余半砖空间时，
         //        在该格填入半砖（同材质→DOUBLE，不同材质→混合）。 ----
         BlockState targetAtPos = level.getBlockState(clickedPos);
-        if (MixedSlabPlacement.tryFill(level, clickedPos, targetAtPos, block, clickedFace, vanillaMode)) {
+        BlockPos filledPos = MixedSlabPlacement.tryFillAt(
+                level, clickedPos, targetAtPos, block, clickedFace, vanillaMode);
+        if (filledPos != null) {
             if (!creative) {
                 stack.shrink(1);
             }
-            // 对称之杖兼容：刚合并出的组合半砖把材质登记到镜像格（tick 末尾写入）
+            // 对称之杖兼容：刚合并出的组合半砖把材质登记到镜像格（tick 末尾写入）。
+            // 位置必须是“实际填入的那一格”（情形 B 下是相邻格），block 是本次新填的那块半砖。
             com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.onMergedSlabPlaced(
-                    level, clickedPos, level.getBlockState(clickedPos), context.getPlayer());
+                    level, filledPos, block, context.getPlayer());
             cir.setReturnValue(InteractionResult.SUCCESS);
             cir.cancel();
             return;

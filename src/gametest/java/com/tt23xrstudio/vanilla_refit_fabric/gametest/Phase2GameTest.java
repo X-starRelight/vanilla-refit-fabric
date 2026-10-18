@@ -223,6 +223,41 @@ public class Phase2GameTest {
         helper.succeed();
     }
 
+    // ===== 6b. 填充位置回报：对称之杖兼容按“真实填入的那一格”搬材质 =====
+
+    @GameTest
+    public void tryFillAtReportsFilledPos(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos slabPos = helper.absolutePos(REL);
+        BlockPos dirtPos = helper.absolutePos(new BlockPos(2, 1, 1));
+
+        helper.setBlock(1, 1, 1, Blocks.STONE_SLAB);
+        helper.setBlock(2, 1, 1, Blocks.DIRT);
+
+        // 情形 A：点半砖本体朝空余面 → 填的就是点击格
+        BlockPos direct = MixedSlabPlacement.tryFillAt(
+                level, slabPos, level.getBlockState(slabPos), Blocks.OAK_SLAB, Direction.UP, false);
+        if (direct == null || !direct.equals(slabPos)) {
+            helper.fail("直接点半砖本体：应返回点击格本身，实际 " + direct);
+            return;
+        }
+
+        // 情形 B：点相邻方块、面朝向半砖 → 填的是相邻格。
+        // （镜像兼容曾把点击格当填充格，情形 B 下材质永远补不到 → 镜像组合半砖渲染成石头）
+        helper.setBlock(1, 1, 1, Blocks.STONE_SLAB);
+        BlockPos neighbor = MixedSlabPlacement.tryFillAt(
+                level, dirtPos, level.getBlockState(dirtPos), Blocks.OAK_SLAB, Direction.WEST, false);
+        if (neighbor == null || !neighbor.equals(slabPos)) {
+            helper.fail("点相邻方块：应返回被填充的半砖那一格 " + slabPos + "，实际 " + neighbor);
+            return;
+        }
+        if (level.getBlockState(slabPos).getBlock() != ModBlocks.MERGED_SLAB) {
+            helper.fail("半砖那格应已合并为 merged_slab");
+            return;
+        }
+        helper.succeed();
+    }
+
     // ===== 7. 填充：竖直朝向（北半 → 点南面空余空间），错面拒绝 =====
 
     @GameTest

@@ -41,7 +41,7 @@ public final class MixedSlabPlacement {
      */
     public static boolean tryFill(Level level, BlockPos clickedPos, BlockState targetState, Block block,
                                   Direction clickedFace) {
-        return tryFill(level, clickedPos, targetState, block, clickedFace, false);
+        return tryFillAt(level, clickedPos, targetState, block, clickedFace, false) != null;
     }
 
     /**
@@ -50,19 +50,32 @@ public final class MixedSlabPlacement {
      */
     public static boolean tryFill(Level level, BlockPos clickedPos, BlockState targetState, Block block,
                                   Direction clickedFace, boolean mixedOnly) {
+        return tryFillAt(level, clickedPos, targetState, block, clickedFace, mixedOnly) != null;
+    }
+
+    /**
+     * 同 {@link #tryFill}，但返回<b>实际被填入的那一格</b>（失败返回 null）。
+     *
+     * <p>情形 A（点半砖本体）填的是点击格本身；情形 B（点相邻方块）填的是相邻格。
+     * 对称之杖兼容要把材质搬到镜像格，必须拿到真实填充位置——传成点击格的话，
+     * 情形 B 下镜像侧永远补不到材质（组合半砖会渲染成默认的石头）。
+     */
+    @org.jetbrains.annotations.Nullable
+    public static BlockPos tryFillAt(Level level, BlockPos clickedPos, BlockState targetState, Block block,
+                                     Direction clickedFace, boolean mixedOnly) {
         // 情形 A：点击半砖本体，点击面朝向它的空余半砖空间（点了“朝空余空间的那一面”）
         if (isDirectFillable(targetState, clickedFace)) {
-            return fill(level, clickedPos, targetState, block, mixedOnly);
+            return fill(level, clickedPos, targetState, block, mixedOnly) ? clickedPos : null;
         }
         // 情形 B：点击相邻方块、且该面朝向一个有空余半砖空间的半砖格
         BlockPos neighborPos = clickedPos.relative(clickedFace);
         if (!neighborPos.equals(clickedPos)) {
             BlockState sideState = level.getBlockState(neighborPos);
             if (isNeighborFillable(sideState)) {
-                return fill(level, neighborPos, sideState, block, mixedOnly);
+                return fill(level, neighborPos, sideState, block, mixedOnly) ? neighborPos : null;
             }
         }
-        return false;
+        return null;
     }
 
     /** 点击半砖本体：该格是半砖、未填满，且点击面朝向空余半砖空间。 */

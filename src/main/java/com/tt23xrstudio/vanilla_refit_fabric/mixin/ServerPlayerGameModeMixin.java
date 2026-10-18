@@ -66,7 +66,10 @@ public abstract class ServerPlayerGameModeMixin {
         if (handled) {
             // 潜行半拆成功：applyBreak 内部的 finishHalfBreak 已消费镜像上下文，这里不用收尾
             if (!sneaking) {
-                com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.endBreak();
+                // 整块拆除：destroyBlock 被我们取消，机械动力的拆除钩子不会触发，
+                // 由兼容层直接把镜像格拆掉（掉落按材质记账、tick 末尾补）
+                com.tt23xrstudio.vanilla_refit_fabric.compat.CreateSymmetryCompat.finishWholeBreak(
+                        this.level, this.player);
             }
             cir.setReturnValue(true);
             cir.cancel();

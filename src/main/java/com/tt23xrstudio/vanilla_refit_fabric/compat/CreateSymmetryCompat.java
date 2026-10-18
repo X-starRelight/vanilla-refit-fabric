@@ -39,11 +39,21 @@ import java.util.Map;
  * {@code setBlockAndUpdate}：方块状态（MODE/TYPE）能镜像过去，但新格子的方块实体是新建的
  * 默认值，所以镜像出来的那一块看起来就是默认（石头+石头）材质的组合半砖。
  *
- * <p>做法：放置侧在本模组自己的合并放置处（BlockItemMixin 混合填充成功后）直接调
- * {@link #onMergedSlabPlaced} 算出该搬的两块材质；拆除侧在接管破坏的前后调
- * {@link #beginBreak}/{@link #endBreak}/{@link #finishHalfBreak}。写入统一等本 tick 结束
- * （{@code ServerTickEvents.END_LEVEL_TICK}）再落盘——机械动力自己也在处理镜像，
- * 等 tick 结束就跟双方的处理顺序无关了。
+ * <p><b>放置侧</b>：机械动力的镜像钩子（飞跃版 ItemStackMixin）用的是
+ * {@code BlockPlaceContext.getClickedPos()}——“直接点半砖朝空余面”时它指向的是旁边那格
+ * <b>空气</b>（原版合并点击不算 canBeReplaced），机械动力根本看不到这次合并；“点相邻方块”
+ * 时它能看到，创造模式会直接 {@code setBlockAndUpdate}（方块实体是新的，默认石头），
+ * 生存模式却会因为背包里没有“组合半砖”物品而放弃。所以这里在 tick 末尾统一补位：
+ * 机械动力已经落位的只补材质；没落位的（本模组自己把镜像组合半砖放下去，生存模式
+ * 按机械动力的语义消耗一份新填的半砖，不白给材料）。
+ *
+ * <p><b>拆除侧</b>：本模组在 {@code destroyBlock} 头部接管了组合半砖的破坏并取消原逻辑，
+ * 机械动力挂在 {@code destroyBlock} 内部的拆除钩子因此<b>永远不会触发</b>。于是接管成功后
+ * 由本兼容直接把镜像格拆掉（掉落按材质在方块还在时记账，tick 末尾补）；半拆时把
+ * “保留的那一半”在 tick 末尾重建回镜像格。
+ *
+ * <p>写入统一等本 tick 结束（{@code ServerTickEvents.END_LEVEL_TICK}）再落盘——
+ * 机械动力自己也在处理镜像，等 tick 结束就跟双方的处理顺序无关了。
  *
  * <p>机械动力（飞跃版，Fabric 版的机械动力就是它）的包根是 {@code com.zurrtum}，
  * 镜像目标格的算法在 {@code SymmetryMirror#process(BlockPos, Pair)}——
@@ -66,6 +76,7 @@ public final class CreateSymmetryCompat {
     /** 反射一次就缓存；失败（机械动力改接口）后不再重试。 */
     private static boolean reflectionFailed;
     private static Method getMirrorMethod;
+    private static Method isEnabledMethod;
     private static Method processMethod;
     private static Method pairOfMethod;
     private static Method pairSecondMethod;
@@ -73,7 +84,12 @@ public final class CreateSymmetryCompat {
     /** 待写入的材质搬运（本 tick 结束、镜像目标格确实落位后再写）。 */
     private static final ArrayDeque<Copy> PENDING = new ArrayDeque<>();
 
-    private record Copy(Level level, BlockPos pos, Block first, Block second) {
+    /**
+     * 一次镜像搬运：目标格 + 镜像后的组合半砖状态 + 两块材质（已按镜像换算决定是否对调）
+     * + 本次合并新填的那块半砖（生存模式补位时按它消耗物品）+ 玩家。
+     */
+    private record Copy(Level level, BlockPos pos, BlockState mirroredState, Block first, Block second,
+                        Block added, @Nullable Player player) {
     }
 
     /** 待补的掉落：机械动力的镜像拆除是先 setBlock(AIR) 再问掉落，那会儿方块实体已经没了。 */
@@ -117,14 +133,18 @@ public final class CreateSymmetryCompat {
     /**
      * 本模组合并出组合半砖后调用（BlockItemMixin 混合填充成功处）：
      * 若玩家拿着对称之杖，就把两块材质登记到所有镜像目标格，tick 末尾写入。
+     *
+     * @param sourcePos 实际填出组合半砖的那一格（情形 B 下是相邻格，不是点击格）
+     * @param addedSlab 本次合并新填进去的那块半砖（生存模式补位镜像时按它扣物品）
      */
-    public static void onMergedSlabPlaced(Level level, BlockPos sourcePos, BlockState sourceState, Player player) {
+    public static void onMergedSlabPlaced(Level level, BlockPos sourcePos, Block addedSlab, Player player) {
         if (reflectionFailed || !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded(CREATE_MOD_ID)) {
             return;
         }
         if (level.isClientSide() || player == null) {
             return;
         }
+        BlockState sourceState = level.getBlockState(sourcePos);
         if (sourceState.getBlock() != ModBlocks.MERGED_SLAB) {
             return;   // 只有“刚合并出来的组合半砖”需要搬材质
         }
@@ -134,6 +154,9 @@ public final class CreateSymmetryCompat {
         ItemStack wand = findWand(player);
         if (wand == null || !prepareReflection()) {
             return;
+        }
+        if (!invokeIsEnabled(wand)) {
+            return;   // 杖被关掉了（机械动力自己这时也不镜像）
         }
         Object mirror = invokeGetMirror(wand);
         if (mirror == null) {
@@ -154,13 +177,20 @@ public final class CreateSymmetryCompat {
             // 另一侧，那就得把两块材质对调，否则上下（南北/东西）会反。
             boolean swap = mirroredFirstHalfSide(mirror, sourcePos, targetPos, sourceSide)
                     != firstHalfSide(entry.getValue());
-            PENDING.add(new Copy(level, targetPos.immutable(),
+            PENDING.add(new Copy(level, targetPos.immutable(), entry.getValue(),
                     swap ? source.getSecondSlab() : source.getFirstSlab(),
-                    swap ? source.getFirstSlab() : source.getSecondSlab()));
+                    swap ? source.getFirstSlab() : source.getSecondSlab(),
+                    addedSlab, player));
         }
     }
 
-    /** 等这一 tick 结束时再写：这时机械动力的镜像方块无论先后都已经落位。 */
+    /**
+     * 等这一 tick 结束时再写：这时机械动力的镜像方块无论先后都已经落位。
+     *
+     * <p>机械动力已经把镜像格变成组合半砖的（点相邻方块 + 创造），只补材质；
+     * 没落位的（直接点半砖朝空余面——它的钩子拿到的是旁边空气格；以及生存模式
+     * 因为背包里没有“组合半砖”物品而放弃的），由本模组把镜像组合半砖放下去。
+     */
     private static void applyPending(Level tickedLevel) {
         for (Iterator<Copy> it = PENDING.iterator(); it.hasNext(); ) {
             Copy copy = it.next();
@@ -170,14 +200,63 @@ public final class CreateSymmetryCompat {
             it.remove();
             Level level = copy.level();
             BlockPos pos = copy.pos();
-            if (level.getBlockState(pos).getBlock() != ModBlocks.MERGED_SLAB) {
-                continue;   // 目标格没被镜像成组合半砖（被挡住/不满足放置条件/已被拆掉）
+            BlockState current = level.getBlockState(pos);
+            if (current.getBlock() == ModBlocks.MERGED_SLAB) {
+                // 机械动力已落位：只补材质，已经有材质的不覆盖
+                if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target && isUnset(target)) {
+                    target.setBlocks(copy.first(), copy.second());
+                }
+                continue;
             }
-            if (!(level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target) || !isUnset(target)) {
-                continue;   // 已经有材质的不要覆盖
+            if (!canMirrorInto(current, copy)) {
+                continue;   // 被别的方块挡住了：不动它（与机械动力的 isUnobstructed 一致）
             }
-            target.setBlocks(copy.first(), copy.second());
+            // 生存模式：机械动力的生存镜像要从背包找“组合半砖”物品（正常玩家不会有），
+            // 永远失败。这里替它补位，但按它的语义先扣一份新填的那块半砖——找不到就不镜像，
+            // 不给白拿材料的口子。
+            if (copy.player() != null && !copy.player().getAbilities().instabuild
+                    && !consumeOne(copy.player(), copy.added())) {
+                continue;
+            }
+            if (!level.setBlock(pos, copy.mirroredState(), 3)) {
+                continue;
+            }
+            if (level.getBlockEntity(pos) instanceof MixedSlabBlockEntity target) {
+                target.setBlocks(copy.first(), copy.second());
+            }
+            level.playSound(null, pos, copy.mirroredState().getSoundType().getPlaceSound(),
+                    SoundSource.BLOCKS, 1.0F, 1.0F);
         }
+    }
+
+    /**
+     * 镜像格能不能落位：空位/可替换方块直接放；
+     * 标准流程里镜像格还留着先前镜像过去的“第一块半砖”（半砖不可被原版替换），
+     * 这时要用组合半砖把它覆盖掉——但只覆盖材质匹配的半砖，
+     * 避免吃掉玩家在镜像格里搭的无关方块。
+     */
+    private static boolean canMirrorInto(BlockState current, Copy copy) {
+        if (current.isAir() || current.canBeReplaced()) {
+            return true;
+        }
+        return current.getBlock() instanceof SlabBlock
+                && current.hasProperty(ModBlockStateProperties.MODE)
+                && current.hasProperty(SlabBlock.TYPE)
+                && current.getValue(SlabBlock.TYPE) != SlabType.DOUBLE
+                && (current.getBlock() == copy.first() || current.getBlock() == copy.second());
+    }
+
+    /** 从玩家背包（含快捷栏）扣掉一份指定半砖物品；没有则不动。 */
+    private static boolean consumeOne(Player player, Block block) {
+        var inventory = player.getInventory();
+        for (int i = 0, size = inventory.getContainerSize(); i < size; i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!stack.isEmpty() && stack.is(block.asItem())) {
+                stack.shrink(1);
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 半拆的镜像格：确认那边确实被拆掉了，就把“保留的那一半”放回去，并只掉落被拆的那半块。 */
@@ -222,10 +301,11 @@ public final class CreateSymmetryCompat {
     /**
      * 破坏接管前调用（此刻源格与镜像格的方块都还在）：记下这次破坏会波及的镜像格。
      *
-     * <p>机械动力的镜像拆除是“先把镜像格设成空气、再调 {@code Block.dropResources} 问掉落”——
-     * 问的时候方块实体已经被清掉，组合半砖在镜像那边会白掉两块材质；半拆（潜行只拆一半）
-     * 时它还会把镜像那格整个拆掉。所以在方块还在的时候先把镜像格和它们的材质记下来，
-     * 本 tick 结束再按需要补掉落 / 把“少掉的那一半”补回原样。
+     * <p>本模组接管组合半砖破坏时取消了原版 {@code destroyBlock}，机械动力挂在里面的
+     * 拆除钩子不会触发——镜像格由本兼容自己拆（整拆在 {@link #finishWholeBreak}、
+     * 半拆在 {@link #finishHalfBreak}）。拆除时方块实体已经没了，问不到组合半砖的两块
+     * 材质，所以在方块还在的时候先把镜像格和它们的材质记下来，tick 末尾再补掉落 /
+     * 把“少掉的那一半”补回原样。
      */
     public static void beginBreak(Level level, Player player, BlockPos pos, BlockState state, boolean halfBreak) {
         clearBreakContext();
@@ -236,6 +316,9 @@ public final class CreateSymmetryCompat {
         ItemStack wand = findWand(player);
         if (wand == null || !prepareReflection()) {
             return;
+        }
+        if (!invokeIsEnabled(wand)) {
+            return;   // 杖被关掉了（机械动力自己这时也不镜像）
         }
         Object mirror = invokeGetMirror(wand);
         if (mirror == null) {
@@ -283,8 +366,8 @@ public final class CreateSymmetryCompat {
      * 半拆完成后调用（MixedSlabBreakHandler#applyBreak 里）：
      * 让镜像格也只少掉对应的那一半（保留另一半）。
      *
-     * <p>做法是等这一 tick 结束、确认镜像格确实被机械动力拆掉了，再把“保留的那一半”放回去，
-     * 并只掉落被拆掉的那半块。
+     * <p>做法是先把镜像格整个拆掉（机械动力的拆除钩子已被我们取消，得自己拆），
+     * tick 末尾再把“保留的那一半”放回去，并只掉落被拆掉的那半块。
      */
     public static void finishHalfBreak(Level level, Player player, BlockPos pos,
                                        BlockState keepState, Block hitBlock) {
@@ -318,6 +401,34 @@ public final class CreateSymmetryCompat {
                     ? mapped.getValue(BlockStateProperties.FACING)
                     : keepSide;
             PENDING_REBUILDS.add(new Rebuild(level, targetPos, halfStateOf(keepBlock, side), removed, hitBlock));
+        }
+        // 机械动力的拆除钩子在被我们取消的 destroyBlock 里，永远不会触发；由我们直接把
+        // 镜像格拆掉——tick 末尾的重建（上面，门卫是 isAir）才会把“保留的那一半”放回去。
+        removeMirrorTargets(level, player, targets);
+    }
+
+    /**
+     * 整块拆除接管成功后调用（接管了组合半砖的破坏、原版 destroyBlock 被取消）：
+     * 机械动力挂在 destroyBlock 里的拆除钩子不会触发，这里直接把镜像格拆掉；
+     * 掉落已在 {@link #beginBreak} 里按材质记账，tick 末尾镜像格变空气后补出。
+     */
+    public static void finishWholeBreak(Level level, Player player) {
+        if (breakTargets != null && breakLevel == level && !breakIsHalf) {
+            removeMirrorTargets(level, player, breakTargets);
+        }
+        clearBreakContext();
+    }
+
+    /** 把记下的镜像格拆掉（破坏粒子 + 置空气），与机械动力 SymmetryWandItem#remove 的效果一致。 */
+    private static void removeMirrorTargets(Level level, @Nullable Player player, List<BlockPos> targets) {
+        for (BlockPos targetPos : targets) {
+            BlockState targetState = level.getBlockState(targetPos);
+            if (targetState.isAir()) {
+                continue;
+            }
+            level.levelEvent(player, net.minecraft.world.level.block.LevelEvent.PARTICLES_DESTROY_BLOCK,
+                    targetPos, Block.getId(targetState));
+            level.setBlock(targetPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         }
     }
 
@@ -444,8 +555,11 @@ public final class CreateSymmetryCompat {
 
     @Nullable
     private static ItemStack findWand(Player player) {
-        var items = player.getInventory().getNonEquipmentItems();
-        for (ItemStack stack : items) {
+        // 与机械动力一致：只认快捷栏（它自己的 onBlockPlaced/onBlockDestroyed 也只扫选择栏）。
+        // 杖放在背包深处时它不镜像，我们也不能单独镜像，否则双方行为分叉。
+        var inventory = player.getInventory();
+        for (int i = 0, size = net.minecraft.world.entity.player.Inventory.getSelectionSize(); i < size; i++) {
+            ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty()
                     && WAND_ITEM_ID.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())) {
                 return stack;
@@ -466,6 +580,7 @@ public final class CreateSymmetryCompat {
             Class<?> mirrorClass = Class.forName(MIRROR_CLASS);
             Class<?> pairClass = Class.forName(PAIR_CLASS);
             getMirrorMethod = wandClass.getMethod("getMirror", ItemStack.class);
+            isEnabledMethod = wandClass.getMethod("isEnabled", ItemStack.class);
             processMethod = mirrorClass.getMethod("process", BlockPos.class, pairClass);
             pairOfMethod = pairClass.getMethod("of", Object.class, Object.class);
             pairSecondMethod = pairClass.getMethod("getSecond");
@@ -493,6 +608,16 @@ public final class CreateSymmetryCompat {
         } catch (ReflectiveOperationException | RuntimeException e) {
             disableReflection("调用 getMirror", e);
             return null;
+        }
+    }
+
+    /** 杖是否处于启用状态（机械动力允许“存着镜面但关掉”，关掉时它不镜像，我们也不能）。 */
+    private static boolean invokeIsEnabled(ItemStack wand) {
+        try {
+            return Boolean.TRUE.equals(isEnabledMethod.invoke(null, wand));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            disableReflection("调用 isEnabled", e);
+            return false;
         }
     }
 
