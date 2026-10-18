@@ -1,5 +1,6 @@
 package com.tt23xrstudio.vanilla_refit_fabric;
 
+import com.tt23xrstudio.vanilla_refit_fabric.command.BtsdhzCommands;
 import com.tt23xrstudio.vanilla_refit_fabric.config.BtsdhzConfig;
 import com.tt23xrstudio.vanilla_refit_fabric.network.ModNetworking;
 import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
@@ -32,6 +33,9 @@ public class VanillaRefitFabric implements ModInitializer {
     public void onInitialize() {
         // 加载 JSON 配置（config/vanilla_refit_fabric.json，不存在则写出默认值）
         BtsdhzConfig.load();
+
+        // 自查命令：/vanilla_refit_fabric blocklist（打印生效方块名单与半砖/楼梯统计）
+        BtsdhzCommands.register();
 
         // 注册方块/物品 → 方块实体类型（顺序：方块先行）
         ModBlocks.initialize();
