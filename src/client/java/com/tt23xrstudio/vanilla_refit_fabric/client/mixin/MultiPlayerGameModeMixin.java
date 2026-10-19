@@ -2,14 +2,27 @@ package com.tt23xrstudio.vanilla_refit_fabric.client.mixin;
 
 import com.tt23xrstudio.vanilla_refit_fabric.util.SlabSupport;
 import com.tt23xrstudio.vanilla_refit_fabric.block.MixedSlabBlock;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -30,6 +43,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *
  * <p>上台阶一侧是镜像：上半台阶下方有上移方块（灯笼/墙）时，台阶格下半格并入了该方块的形状，
  * 指着这半格时挖掘目标改判成台阶<em>下方</em>的方块。
+ *
+ * <p>右键（使用物品）走的是同一条改判：指着并入的那半格时，命中结果本来是台阶，
+ * 拿拴绳点栅栏伸进台阶那半格就什么都不会发生（{@code LeadItem} 看到的是台阶）。
+ * 这里把 {@code useItemOn} 的命中结果也改判成贴着的那个方块，并按对方自己的形状重算命中点；
+ * 如果那半格里正好有栅栏上的绕绳结、射线也真的碰到它，则按“点到绳结”处理（解绳/继续连接）。
  */
 @Mixin(MultiPlayerGameMode.class)
 public abstract class MultiPlayerGameModeMixin {
@@ -45,6 +63,16 @@ public abstract class MultiPlayerGameModeMixin {
 
     @Shadow(remap = false)
     public abstract boolean continueDestroyBlock(BlockPos pos, Direction face);
+
+    @Shadow(remap = false)
+    public abstract InteractionResult useItemOn(LocalPlayer player, InteractionHand hand, BlockHitResult result);
+
+    @Shadow(remap = false)
+    public abstract InteractionResult interact(Player player, Entity target, InteractionHand hand);
+
+    /** 防重入：改判后要再走一遍 {@code useItemOn}，不能又被自己拦一次。 */
+    @Unique
+    private boolean vanillaRefit$redirectingUse;
 
     @Inject(method = "startDestroyBlock", at = @At("HEAD"), cancellable = true, remap = false)
     private void vanillaRefit$redirectStartTarget(BlockPos pos, Direction face,
@@ -85,6 +113,37 @@ public abstract class MultiPlayerGameModeMixin {
             cir.cancel();
             return;
         }
+    }
+
+    /**
+     * 指着“并入的舒适框”那半格右键时，把这次使用改判到贴着的那个方块上。
+     *
+     * <p>不改判的话，本次使用会落在台阶（或下移方块）本身上：拿拴绳点栅栏伸出去的那半格、
+     * 点栅栏上的绕绳结都不会有反应。改判与挖掉一侧共用同一套判定（{@code redirectTarget}），
+     * 所以只在“指着确实属于那个方块的那半格”时生效，指着台阶本体、台阶顶面（y=0.5）都不受影响。
+     */
+    @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true, remap = false)
+    private void vanillaRefit$redirectUseTarget(LocalPlayer player, InteractionHand hand,
+                                                BlockHitResult hitResult,
+                                                CallbackInfoReturnable<InteractionResult> cir) {
+        if (this.vanillaRefit$redirectingUse || this.minecraft.level == null) {
+            return;
+        }
+        BlockPos pos = hitResult.getBlockPos();
+        BlockPos target = vanillaRefit$redirectTarget(pos, hitResult);
+        if (target.equals(pos)) {
+            return;
+        }
+        LeashFenceKnotEntity knot = vanillaRefit$knotHitBy(player, target, hitResult);
+        this.vanillaRefit$redirectingUse = true;
+        try {
+            cir.setReturnValue(knot != null
+                    ? this.interact(player, knot, hand)
+                    : this.useItemOn(player, hand, vanillaRefit$reclipToBlock(player, target, hitResult)));
+        } finally {
+            this.vanillaRefit$redirectingUse = false;
+        }
+        cir.cancel();
     }
 
     /**
@@ -150,5 +209,51 @@ public abstract class MultiPlayerGameModeMixin {
         }
         double half = blockHit.getLocation().y - pos.getY();
         return aboveHalf ? half > 0.5 : half < 0.5;
+    }
+
+    /**
+     * 把命中点重新算到目标方块自己的形状上。
+     *
+     * <p>服务端会拒绝“命中点离被命中方块中心超过 1 格”的右键包，所以不能只把方块坐标换掉、
+     * 点还留在台阶格那边。这里用玩家视线与目标方块当前形状（含本模组位移）求交，拿到真实的面与点；
+     * 万一求不到（例如形状是空心的），退回原命中点——相邻格的距离仍在 1 格以内，服务端照收。
+     */
+    @Unique
+    private BlockHitResult vanillaRefit$reclipToBlock(Player player, BlockPos target, BlockHitResult original) {
+        Level level = this.minecraft.level;
+        Vec3 eye = player.getEyePosition(1.0F);
+        Vec3 end = eye.add(player.getViewVector(1.0F).scale(eye.distanceTo(original.getLocation()) + 0.1));
+        BlockState state = level.getBlockState(target);
+        VoxelShape shape = state.getShape(level, target, CollisionContext.of(player));
+        if (!shape.isEmpty()) {
+            BlockHitResult reclipped = shape.clip(eye, end, target);
+            if (reclipped != null) {
+                return reclipped;
+            }
+        }
+        return new BlockHitResult(original.getLocation(), original.getDirection(), target, original.isInside());
+    }
+
+    /**
+     * @return 改判目标栅栏上、视线真的碰到的那一个绕绳结；没有则 null
+     *
+     * <p>绳结整体位移半格后，它有一半落在台阶那一格里，那半格的点会被台阶的舒适框先接住。
+     * 如果玩家其实是在点绳结（拴绳的线圈），这里按“点到绳结”处理，而不是按点栅栏方块处理。
+     */
+    @Unique
+    private LeashFenceKnotEntity vanillaRefit$knotHitBy(Player player, BlockPos target, BlockHitResult hitResult) {
+        Level level = this.minecraft.level;
+        if (!level.getBlockState(target).is(BlockTags.FENCES)) {
+            return null;
+        }
+        Vec3 eye = player.getEyePosition(1.0F);
+        Vec3 end = eye.add(player.getViewVector(1.0F).scale(eye.distanceTo(hitResult.getLocation()) + 0.1));
+        for (LeashFenceKnotEntity knot : level.getEntitiesOfClass(LeashFenceKnotEntity.class, new AABB(target).inflate(0.5))) {
+            if (knot.getPos().equals(target)
+                    && knot.getBoundingBox().inflate(0.05).clip(eye, end).isPresent()) {
+                return knot;
+            }
+        }
+        return null;
     }
 }
