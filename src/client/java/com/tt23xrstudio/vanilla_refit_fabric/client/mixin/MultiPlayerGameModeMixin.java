@@ -96,6 +96,8 @@ public abstract class MultiPlayerGameModeMixin {
         }
     }
 
+    // require = 0：唯独这里允许注入失败——它只是“潜行拆半砖交给服务端权威”的优化，
+    // 失败最多退化为客户端预测与服务端的一次差异，可接受；其余三个改判注入失败应显式暴露。
     @Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void vanillaRefit$redirectDestroy(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
         if (this.minecraft.level == null) {
@@ -227,7 +229,9 @@ public abstract class MultiPlayerGameModeMixin {
         VoxelShape shape = state.getShape(level, target, CollisionContext.of(player));
         if (!shape.isEmpty()) {
             BlockHitResult reclipped = shape.clip(eye, end, target);
-            if (reclipped != null) {
+            // clip 未命中时返回的是 MISS 类型而不是 null，必须按类型判，否则会把
+            // BlockPos.ZERO（MISS 结果的默认坐标）当命中点喂给 useItemOn。
+            if (reclipped.getType() != HitResult.Type.MISS) {
                 return reclipped;
             }
         }
