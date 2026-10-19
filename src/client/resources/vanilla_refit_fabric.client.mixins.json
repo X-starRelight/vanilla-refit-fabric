@@ -4,7 +4,8 @@
   "compatibilityLevel": "JAVA_25",
   "client": [
     "TorchParticleMixin",
-    "RedstoneTorchParticleMixin"
+    "RedstoneTorchParticleMixin",
+    "MultiPlayerGameModeMixin"
   ],
   "injectors": {
     "defaultRequire": 1
