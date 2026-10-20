@@ -40,6 +40,7 @@ public class VanillaRefitFabric implements ModInitializer {
         // 注册方块/物品 → 方块实体类型（顺序：方块先行）
         ModBlocks.initialize();
         ModBlockEntities.initialize();
+        ModEntities.initialize();
 
         // 放置模式：网络载荷类型 + 服务端接收器 + 登录下发（附件在类加载时注册）
         ModNetworking.register();
