@@ -2,6 +2,7 @@ package com.tt23xrstudio.vanilla_refit_fabric.client;
 
 import com.tt23xrstudio.vanilla_refit_fabric.ModEntities;
 import com.tt23xrstudio.vanilla_refit_fabric.client.model.ModModelLoading;
+import com.tt23xrstudio.vanilla_refit_fabric.client.renderer.FenceKnotRenderer;
 import com.tt23xrstudio.vanilla_refit_fabric.client.renderer.SitEntityRenderer;
 import com.tt23xrstudio.vanilla_refit_fabric.debug.MemProbeClient;
 import com.tt23xrstudio.vanilla_refit_fabric.debug.RenderBench;
@@ -32,6 +33,8 @@ public class VanillaRefitFabricClient implements ClientModInitializer {
 
         // 坐/爬：座位渲染器（隐形）+ 按键消费与爬行姿态同步
         EntityRendererRegistry.register(ModEntities.SIT, SitEntityRenderer::new);
+        // 牵引绳悬链：栅栏绕绳结渲染器（结本体 + 悬链线 + 待连接手部绳）
+        EntityRendererRegistry.register(ModEntities.FENCE_KNOT, FenceKnotRenderer::new);
         SitCrawlClient.init();
 
         // 阶段 2：模型层——竖直台阶/楼梯的模板换图 + 混合半砖动态合并 + 区块标脏钩子注入
