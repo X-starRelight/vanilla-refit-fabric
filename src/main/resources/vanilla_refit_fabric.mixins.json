@@ -28,7 +28,11 @@
     "AnvilNoWearMixin",
     "PlayerSitMixin",
     "PlayerCrawlPoseMixin",
-    "PlayerEyeHeightMixin"
+    "PlayerEyeHeightMixin",
+    "LeadItemMixin",
+    "FenceLeadUseMixin",
+    "LeashKnotOnSlabMixin",
+    "BlockAttachedKnotOffsetMixin"
   ],
   "injectors": {
     "defaultRequire": 1

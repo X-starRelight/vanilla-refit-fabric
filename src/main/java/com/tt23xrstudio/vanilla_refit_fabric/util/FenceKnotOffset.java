@@ -56,12 +56,22 @@ public final class FenceKnotOffset {
      * <p>服务端要用它做准星与交互判定，客户端要用它渲染绳结与拴绳，
      * 所以两边都按自己这一格的方块状态现算，不依赖位置同步包
      * （绳结实体的 updateInterval 为 {@code Integer.MAX_VALUE}，本来就不发位置包）。</p>
+     *
+     * <p><b>26.2 实测（gametest 复现）</b>：不能沿用源版的 {@code setPos(x, knot.getY(), z)}
+     * ——挂靠实体的 {@code setPos} 会按 {@code floor(y)} 重设挂靠点，传入带小数的当前 y
+     * （如贴下台阶平衡位 -56.125）会把挂靠点漂到下一格（floor = -57），此后
+     * recalculateBoundingBox 按漂移后的格子算高度，绳结错位半格以上。
+     * 这里直接用 {@code setPosRaw} 把位置精确摆到目标（不触发挂靠点重设、不走
+     * recalculateBoundingBox 链），判定框同步平移。</p>
      */
     public static void refresh(LeashFenceKnotEntity knot) {
         BlockPos pos = knot.getPos();
-        if (Math.abs(knot.getY() - knotY(knot.level(), pos)) < 1.0E-4) {
+        double target = knotY(knot.level(), pos);
+        if (Math.abs(knot.getY() - target) < 1.0E-4) {
             return;
         }
-        knot.setPos(pos.getX(), knot.getY(), pos.getZ());
+        double dy = target - knot.getY();
+        knot.setPosRaw(pos.getX() + 0.5, target, pos.getZ() + 0.5);
+        knot.setBoundingBox(knot.getBoundingBox().move(0.0, dy, 0.0));
     }
 }
