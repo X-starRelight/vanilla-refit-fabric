@@ -1,10 +1,13 @@
 package com.tt23xrstudio.vanilla_refit_fabric.client;
 
+import com.tt23xrstudio.vanilla_refit_fabric.ModEntities;
 import com.tt23xrstudio.vanilla_refit_fabric.client.model.ModModelLoading;
+import com.tt23xrstudio.vanilla_refit_fabric.client.renderer.SitEntityRenderer;
 import com.tt23xrstudio.vanilla_refit_fabric.debug.MemProbeClient;
 import com.tt23xrstudio.vanilla_refit_fabric.debug.RenderBench;
 import com.tt23xrstudio.vanilla_refit_fabric.util.ClientHooks;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +29,10 @@ public class VanillaRefitFabricClient implements ClientModInitializer {
         // 阶段 2：放置逻辑切换按键 + 服务端同步
         ModKeyBindings.register();
         PlacementModeClient.init();
+
+        // 坐/爬：座位渲染器（隐形）+ 按键消费与爬行姿态同步
+        EntityRendererRegistry.register(ModEntities.SIT, SitEntityRenderer::new);
+        SitCrawlClient.init();
 
         // 阶段 2：模型层——竖直台阶/楼梯的模板换图 + 混合半砖动态合并 + 区块标脏钩子注入
         ModModelLoading.register();
