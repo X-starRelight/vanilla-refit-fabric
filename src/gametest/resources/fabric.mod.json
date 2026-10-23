@@ -15,7 +15,8 @@
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.GlassMiningTagGameTest",
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.AnvilRepairGameTest",
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.CommandBlocklistGameTest",
-      "com.tt23xrstudio.vanilla_refit_fabric.gametest.SitEntityGameTest"
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.SitEntityGameTest",
+      "com.tt23xrstudio.vanilla_refit_fabric.gametest.SitLogicGameTest"
     ],
     "fabric-client-gametest": [
       "com.tt23xrstudio.vanilla_refit_fabric.gametest.Phase3PaneClientGameTest"
