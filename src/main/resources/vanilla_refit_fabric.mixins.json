@@ -25,7 +25,10 @@
     "PaneIndirectNeighbourMixin",
     "LevelChunkPostProcessMixin",
     "AnvilMenuMixin",
-    "AnvilNoWearMixin"
+    "AnvilNoWearMixin",
+    "PlayerSitMixin",
+    "PlayerCrawlPoseMixin",
+    "PlayerEyeHeightMixin"
   ],
   "injectors": {
     "defaultRequire": 1

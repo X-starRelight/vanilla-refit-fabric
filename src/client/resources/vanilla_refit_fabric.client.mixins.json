@@ -5,7 +5,8 @@
   "client": [
     "TorchParticleMixin",
     "RedstoneTorchParticleMixin",
-    "MultiPlayerGameModeMixin"
+    "MultiPlayerGameModeMixin",
+    "SitDismountHintMixin"
   ],
   "injectors": {
     "defaultRequire": 1
