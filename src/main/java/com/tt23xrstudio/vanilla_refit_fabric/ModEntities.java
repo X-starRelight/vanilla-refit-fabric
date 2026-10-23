@@ -20,7 +20,7 @@ public final class ModEntities {
     public static final Identifier SIT_ID = Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "sit");
 
     /**
-     * 隐形座位：尺寸 0.001×0.001、不写盘、追踪范围 10 格、更新间隔
+     * 隐形座位：随盘保存、尺寸 0.001×0.001、追踪范围 10 格、更新间隔
      * {@code Integer.MAX_VALUE}（几乎不发位置同步包——座位本身永远不动）。
      */
     public static final EntityType<SitEntity> SIT = Registry.register(
@@ -28,7 +28,9 @@ public final class ModEntities {
             SIT_ID,
             EntityType.Builder.<SitEntity>of(SitEntity::new, MobCategory.MISC)
                     .sized(0.001F, 0.001F)
-                    .noSave()
+                    // 26.2：startRiding 前置检查会拒绝 serialize=false（不可写盘）的载具——
+                    // 26.1 世界存储重构后，骑上不入盘的实体会导致存档时玩家-载具关联断裂。
+                    // 故座位必须随盘保存；无人骑乘时仍由 tick() 立即 discard，行为不变。
                     .clientTrackingRange(10)
                     .updateInterval(Integer.MAX_VALUE)
                     .build(ResourceKey.create(Registries.ENTITY_TYPE, SIT_ID)));

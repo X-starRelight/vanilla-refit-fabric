@@ -29,6 +29,8 @@ public class SitEntity extends Entity {
         this.setNoGravity(true);
     }
 
+    // 26.2 契约（与 1.21 源项目同款写法）：defineSynchedData 是抽象方法，子类只登记「自己的」追踪数据，
+    // 基类键（位置/乘客等）由 Entity 构造器预登记。座位无自有数据，空体即可。
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
     }
