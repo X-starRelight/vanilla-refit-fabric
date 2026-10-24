@@ -2,6 +2,7 @@ package com.tt23xrstudio.vanilla_refit_fabric;
 
 import com.tt23xrstudio.vanilla_refit_fabric.command.BtsdhzCommands;
 import com.tt23xrstudio.vanilla_refit_fabric.config.BtsdhzConfig;
+import com.tt23xrstudio.vanilla_refit_fabric.event.FenceRopeEvents;
 import com.tt23xrstudio.vanilla_refit_fabric.network.ModNetworking;
 import com.tt23xrstudio.vanilla_refit_fabric.util.CrawlLogic;
 import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
@@ -45,6 +46,8 @@ public class VanillaRefitFabric implements ModInitializer {
         // FenceKnotEntity 的 SynchedEntityData.defineId，届时序列化器必须已在表中）
         ModEntityData.initialize();
         ModEntities.initialize();
+        // 牵引绳悬链：待连接状态下持拴绳点动物 → 拴到 pending 栅栏的绳结（UseEntityCallback）
+        FenceRopeEvents.register();
 
         // 放置模式：网络载荷类型 + 服务端接收器 + 登录下发（附件在类加载时注册）
         ModNetworking.register();

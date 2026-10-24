@@ -18,7 +18,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.LeadItem;
@@ -28,6 +31,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 
 /**
  * 牵引绳悬链测试：绳结实体注册、伙伴连接生命周期、消耗返还、贴台阶位移。
@@ -255,6 +259,59 @@ public class LeashRopeGameTest {
                 });
             });
         });
+    }
+
+    /**
+     * 待连接状态下持拴绳点动物：动物被拴到 pending 栅栏的绳结上、pending 清空、非创造扣 1 根
+     * （FenceRopeEvents / UseEntityCallback，事件同步执行故断言无需延帧）。
+     */
+    @GameTest
+    public void pendingBindsLeashedAnimal(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos a = helper.absolutePos(new BlockPos(1, 1, 1));
+        helper.setBlock(1, 1, 1, Blocks.OAK_FENCE);
+
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.setPos(a.getX() + 0.5, a.getY(), a.getZ() + 0.5);
+        ItemStack lead = new ItemStack(Items.LEAD, 8);
+        player.setItemInHand(InteractionHand.MAIN_HAND, lead);
+        FenceRopeLogic.setPending(player, a);
+
+        // 26.2 已无 EntityType.PIG 常量（同 MINECART），按注册表 id 取型并收窄（坐/爬批次同款先例）。
+        @SuppressWarnings("unchecked")
+        EntityType<Pig> pigType = (EntityType<Pig>) BuiltInRegistries.ENTITY_TYPE.getValue(
+                Identifier.fromNamespaceAndPath("minecraft", "pig"));
+        Pig pig = pigType.create(level, EntitySpawnReason.TRIGGERED);
+        if (pig == null) {
+            helper.fail("创建猪失败");
+        }
+        pig.setPos(a.getX() + 2.5, a.getY(), a.getZ() + 0.5);
+        level.addFreshEntity(pig);
+
+        // 前置诊断：回调返回 PASS 时区分是哪个守卫拒绝
+        if (!(pig instanceof net.minecraft.world.entity.Leashable)) {
+            helper.fail("Pig 不是 Leashable（26.2 实现层级变化）");
+        }
+        if (FenceRopeLogic.getPending(player) == null) {
+            helper.fail("setPending 后 getPending 取回 null（附件存取断裂）");
+        }
+
+        int before = lead.getCount();
+        InteractionResult result = UseEntityCallback.EVENT.invoker()
+                .interact(player, level, InteractionHand.MAIN_HAND, pig, null);
+        if (!result.consumesAction()) {
+            helper.fail("点动物应返回消费型结果，实际 " + result);
+        }
+        if (!(pig.getLeashHolder() instanceof FenceKnotEntity)) {
+            helper.fail("猪应被拴到绳结上，实际 " + pig.getLeashHolder());
+        }
+        if (FenceRopeLogic.getPending(player) != null) {
+            helper.fail("点动物消耗连接后 pending 应清空");
+        }
+        if (!player.getAbilities().instabuild && lead.getCount() != before - 1) {
+            helper.fail("非创造应扣 1 根拴绳，实际 " + before + " -> " + lead.getCount());
+        }
+        helper.succeed();
     }
 
     /** 手持拴绳右键栅栏（直接调 LeadItem.useOn，等价服务端物品钩子）。 */
