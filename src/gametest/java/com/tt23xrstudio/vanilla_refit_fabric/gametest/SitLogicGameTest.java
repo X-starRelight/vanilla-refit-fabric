@@ -11,10 +11,10 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -41,8 +41,8 @@ public class SitLogicGameTest {
     @GameTest
     public void toggleSitSitsAndDismounts(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
-        // makeMockServerPlayerInLevel 出生在 (0,0,0)（测试世界原点，区块未加载）；
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
+        // mock server player 出生在 (0,0,0)（测试世界原点，区块未加载）；
         // 把玩家挪进本测试结构内，座位才会跟着生成在已加载、会 tick 的区块里（与真实玩法一致）。
         BlockPos spot = helper.absolutePos(new BlockPos(2, 1, 2));
         player.setPos(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
@@ -115,7 +115,7 @@ public class SitLogicGameTest {
             }
 
             // D5：第二个 mock 玩家骑同一座位（排除玩家个体状态）
-            ServerPlayer other = helper.makeMockServerPlayerInLevel();
+            ServerPlayer other = MockPlayers.mockPlayer(helper);
             other.setPos(player.getX(), player.getY(), player.getZ());
             boolean d5 = other.startRiding(probe, true, true);
             diag.append("，D5 第二玩家骑座位=").append(d5);
@@ -267,7 +267,7 @@ public class SitLogicGameTest {
     /** 爬行标记：默认 false -> true -> false（服务端 UUID 集合读写）。 */
     @GameTest
     public void crawlFlagRoundTrip(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         if (CrawlLogic.isCrawling(player)) {
             helper.fail("新玩家默认不应处于爬行状态");

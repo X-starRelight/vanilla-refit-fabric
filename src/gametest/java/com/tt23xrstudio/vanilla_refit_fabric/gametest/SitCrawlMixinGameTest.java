@@ -27,7 +27,7 @@ public class SitCrawlMixinGameTest {
     /** 坐姿眼高下沉：getEyeHeight() 与 getEyeY() 都应比未注入重载的基准低 0.35。 */
     @GameTest
     public void sittingLowersEyeHeight(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         SitLogic.toggleSit(player);
         if (!(player.getVehicle() instanceof SitEntity)) {
             helper.fail("应已坐下，实际载具=" + player.getVehicle());
@@ -50,7 +50,7 @@ public class SitCrawlMixinGameTest {
     /** 爬行标记 → updatePlayerPose 强制 SWIMMING；清除 → 退出 SWIMMING。 */
     @GameTest
     public void crawlForcesSwimmingPose(GameTestHelper helper) throws Exception {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         // 反射调用 protected updatePlayerPose()；若 setAccessible 被 Java 25 模块封装拦截，
         // 删本用例并转人工手测（计划风险 5）
         Method updatePose = Player.class.getDeclaredMethod("updatePlayerPose");

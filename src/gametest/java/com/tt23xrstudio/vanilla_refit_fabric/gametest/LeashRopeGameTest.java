@@ -15,7 +15,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -26,6 +26,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.LeadItem;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -207,7 +208,7 @@ public class LeashRopeGameTest {
 
         helper.setBlock(1, 1, 1, Blocks.OAK_FENCE);
         helper.setBlock(3, 1, 1, Blocks.OAK_FENCE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         player.setPos(a.getX() + 0.5, a.getY(), a.getZ() + 0.5);
         ItemStack lead = new ItemStack(Items.LEAD, 8);
         player.setItemInHand(InteractionHand.MAIN_HAND, lead);
@@ -271,7 +272,7 @@ public class LeashRopeGameTest {
         BlockPos a = helper.absolutePos(new BlockPos(1, 1, 1));
         helper.setBlock(1, 1, 1, Blocks.OAK_FENCE);
 
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         player.setPos(a.getX() + 0.5, a.getY(), a.getZ() + 0.5);
         ItemStack lead = new ItemStack(Items.LEAD, 8);
         player.setItemInHand(InteractionHand.MAIN_HAND, lead);
@@ -315,7 +316,7 @@ public class LeashRopeGameTest {
     }
 
     /** 手持拴绳右键栅栏（直接调 LeadItem.useOn，等价服务端物品钩子）。 */
-    private static InteractionResult useLeadOnFence(ServerLevel level, ServerPlayer player,
+    private static InteractionResult useLeadOnFence(ServerLevel level, Player player,
                                                     ItemStack lead, BlockPos pos) {
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
         UseOnContext context = new UseOnContext(level, player, InteractionHand.MAIN_HAND, lead, hit);

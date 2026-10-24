@@ -12,8 +12,8 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -317,7 +317,7 @@ public class Phase2GameTest {
         }
         mixed.setBlocks(Blocks.STONE_SLAB, Blocks.OAK_SLAB);
 
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         // 站在方块北侧、视线朝南，高度对准方块中心：无论走视线裁剪还是方位兜底，都命中北半(A)
         player.setPos(pos.getX() + 0.5, pos.getY() + 0.5 - player.getEyeHeight(), pos.getZ() - 2.0);
         player.setYRot(0.0F);   // yaw 0 = 面向 +Z（南）
@@ -349,8 +349,10 @@ public class Phase2GameTest {
     // ===== 9. 放置模式：服务端持久状态写入 + 读回 + 按键轮转 =====
 
     @GameTest
+    // 本用例专门验证已弃用的 MOD_2（序号1）存档兼容：写入旧序号应并回默认 MOD——必须引用弃用常量
+    @SuppressWarnings("deprecation")
     public void placementModeAttachmentRoundTrip(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         if (PlacementModeState.slab(player) != PlacementMode.MOD
                 || PlacementModeState.stair(player) != PlacementMode.MOD) {
@@ -431,7 +433,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         // 点顶面中央（0.5, 1.0, 0.5）：落在中央正方形内 → 按原版平放
         BlockHitResult hit = new BlockHitResult(
@@ -454,7 +456,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         // 点顶面外圈 NW（0.2, 1.0, 0.2）：正方形外 → 竖放，|x|=|z| → 北象限
         BlockHitResult hit = new BlockHitResult(
@@ -479,7 +481,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.5, base.getY() + 1.0, base.getZ() + 0.5), Direction.UP, base, false);
@@ -502,7 +504,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.2, base.getY() + 1.0, base.getZ() + 0.2), Direction.UP, base, false);
@@ -531,7 +533,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.15, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
@@ -554,7 +556,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.85, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
@@ -577,7 +579,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.5, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
@@ -600,7 +602,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 1.0, base.getY() + 0.5, base.getZ() + 0.15), Direction.EAST, base, false);
@@ -623,7 +625,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.15, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
@@ -646,7 +648,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.85, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);
@@ -669,7 +671,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 1.0, base.getY() + 0.5, base.getZ() + 0.15), Direction.EAST, base, false);
@@ -692,7 +694,7 @@ public class Phase2GameTest {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
         helper.setBlock(1, 1, 1, Blocks.COBBLESTONE);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         BlockHitResult hit = new BlockHitResult(
                 new Vec3(base.getX() + 0.5, base.getY() + 0.5, base.getZ() + 0.0), Direction.NORTH, base, false);

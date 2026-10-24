@@ -7,9 +7,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -55,7 +56,7 @@ public class Phase3PaneGameTest {
     }
 
     /** 对着 {@code absHitPos} 的 {@code face} 面放一块玻璃板（新方块落在 absHitPos.relative(face)）。 */
-    private static void placePane(GameTestHelper helper, ServerPlayer player, BlockPos absHitPos, Direction face) {
+    private static void placePane(GameTestHelper helper, Player player, BlockPos absHitPos, Direction face) {
         BlockHitResult hit = hit(absHitPos, face);
         player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.GLASS_PANE));
         ((BlockItem) Items.GLASS_PANE).useOn(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
@@ -94,7 +95,7 @@ public class Phase3PaneGameTest {
      */
     @GameTest
     public void isolatedFloatingPaneKeepsVanillaPost(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
         placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
         require(helper, stateAt(helper, PANE).is(Blocks.GLASS_PANE), "玻璃板应落在地面上方一格");
@@ -131,7 +132,7 @@ public class Phase3PaneGameTest {
     @GameTest
     public void paneOnGroundAgainstWallLightsVerticalStrip(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
         placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
         require(helper, stateAt(helper, PANE).is(Blocks.GLASS_PANE), "玻璃板应落在地面上方一格");
@@ -173,7 +174,7 @@ public class Phase3PaneGameTest {
     @GameTest
     public void paneBetweenTwoWallsLightsDiagonalCorner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         // 先把周围环境摆好，再一次成型（规则是纯函数，顺序无关）
         helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
         helper.setBlock(new BlockPos(1, 2, 0), Blocks.STONE.defaultBlockState());
@@ -217,7 +218,7 @@ public class Phase3PaneGameTest {
      */
     @GameTest
     public void diagonalPaneAddedLaterLightsOriginCorner(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
         BlockPos absGround = helper.absolutePos(GROUND);
 
@@ -252,7 +253,7 @@ public class Phase3PaneGameTest {
      */
     @GameTest
     public void floatingPanePairConnectsLikeVanilla(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         // 临时脚手架：先借它落脚放下板 A，撤掉后 A 完全悬空（上下左右只剩另一块板）
         helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());
         placePane(helper, player, helper.absolutePos(GROUND), Direction.UP);
@@ -343,7 +344,7 @@ public class Phase3PaneGameTest {
      */
     @GameTest
     public void paneRulesAreOrderIndependent(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         // 场景一：先摆周围，后放原点
         helper.setBlock(GROUND, Blocks.STONE.defaultBlockState());

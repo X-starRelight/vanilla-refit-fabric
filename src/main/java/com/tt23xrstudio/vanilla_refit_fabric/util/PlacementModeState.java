@@ -28,16 +28,14 @@ public final class PlacementModeState {
     private static final Map<UUID, PlacementMode> CLIENT_STAIR = new ConcurrentHashMap<>();
 
     /** 台阶放置逻辑（服务端权威，持久化）。值为 {@link PlacementMode#ordinal()}。 */
-    public static final AttachmentType<Integer> SLAB_MODE = AttachmentRegistry.<Integer>builder()
-            .persistent(Codec.INT)
-            .initializer(() -> PlacementMode.MOD.ordinal())
-            .buildAndRegister(Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "slab_placement_mode"));
+    public static final AttachmentType<Integer> SLAB_MODE = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "slab_placement_mode"),
+            builder -> builder.persistent(Codec.INT).initializer(() -> PlacementMode.MOD.ordinal()));
 
     /** 楼梯放置逻辑（服务端权威，持久化）。值为 {@link PlacementMode#ordinal()}。 */
-    public static final AttachmentType<Integer> STAIR_MODE = AttachmentRegistry.<Integer>builder()
-            .persistent(Codec.INT)
-            .initializer(() -> PlacementMode.MOD.ordinal())
-            .buildAndRegister(Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "stair_placement_mode"));
+    public static final AttachmentType<Integer> STAIR_MODE = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "stair_placement_mode"),
+            builder -> builder.persistent(Codec.INT).initializer(() -> PlacementMode.MOD.ordinal()));
 
     private PlacementModeState() {
     }

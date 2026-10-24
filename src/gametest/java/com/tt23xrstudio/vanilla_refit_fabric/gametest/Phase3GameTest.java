@@ -6,8 +6,9 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -39,7 +40,7 @@ public class Phase3GameTest {
     private static final BlockPos REL = new BlockPos(1, 1, 1);
 
     /** 用玩家上下文对着 absHitPos 的 face 面点击放置 item（走完整 BlockItem.place 链路）。 */
-    private static void clickPlace(GameTestHelper helper, ServerPlayer player,
+    private static void clickPlace(GameTestHelper helper, Player player,
                                    BlockPos absHitPos, Direction face, Vec3 absHitVec, Item item) {
         BlockHitResult hit = new BlockHitResult(absHitVec, face, absHitPos, false);
         player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
@@ -62,7 +63,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.TORCH);
 
         BlockPos torchPos = base.above();
@@ -87,7 +88,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.COBBLESTONE);
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.TORCH);
 
         BlockState torch = level.getBlockState(base.above());
@@ -107,7 +108,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.TORCH);
 
         helper.setBlock(REL, Blocks.COBBLESTONE);
@@ -128,7 +129,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.OAK_FENCE);
         BlockState fence = level.getBlockState(base.above());
         if (fence.getBlock() != Blocks.OAK_FENCE
@@ -156,7 +157,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.OAK_FENCE);
 
         BlockPos fencePos = base.above();
@@ -179,7 +180,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.COBBLESTONE);
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.OAK_FENCE);
 
         BlockPos fencePos = base.above();
@@ -207,7 +208,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.COBBLESTONE_WALL);
 
         BlockPos wallPos = base.above();
@@ -233,7 +234,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         // 台阶东侧（同一层 y=1）放普通墙（helper.setBlock 用相对坐标）
         BlockPos eastPos = base.relative(Direction.EAST);
@@ -264,7 +265,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.LANTERN);
 
         BlockPos lanternPos = base.above();
@@ -293,7 +294,7 @@ public class Phase3GameTest {
     public void lanternRaisesUnderTopSlab(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
 
         // 头顶放完整方块（helper.setBlock 用相对坐标 = REL.above(2)），从其底面挂出原版悬挂灯笼
         BlockPos fullPos = base.above(2);
@@ -333,7 +334,7 @@ public class Phase3GameTest {
         ServerLevel level = helper.getLevel();
         helper.setBlock(REL, Blocks.STONE_SLAB.defaultBlockState());
         BlockPos base = helper.absolutePos(REL);
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         clickPlace(helper, player, base, Direction.UP, topCenter(base), Items.OAK_FENCE);
 
         BlockState slab = level.getBlockState(base);

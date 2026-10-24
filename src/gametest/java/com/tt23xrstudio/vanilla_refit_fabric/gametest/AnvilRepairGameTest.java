@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
@@ -25,7 +26,7 @@ import net.minecraft.world.item.Items;
 public class AnvilRepairGameTest {
 
     /** 搭一个铁砧菜单：输入槽放损坏铁剑，材料槽放铁锭，直接调 createResult()。 */
-    private static AnvilMenu buildRepairMenu(GameTestHelper helper, ServerPlayer player,
+    private static AnvilMenu buildRepairMenu(GameTestHelper helper, Player player,
                                              ItemStack input, ItemStack material) {
         AnvilMenu menu = new AnvilMenu(0, player.getInventory(),
                 ContainerLevelAccess.create(helper.getLevel(), helper.absolutePos(new BlockPos(1, 1, 1))));
@@ -42,7 +43,7 @@ public class AnvilRepairGameTest {
      */
     @GameTest
     public void materialRepairRestoresNinetyPercent(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         ItemStack sword = new ItemStack(Items.IRON_SWORD);
         sword.setDamageValue(240);
 
@@ -68,7 +69,7 @@ public class AnvilRepairGameTest {
      */
     @GameTest
     public void materialRepairKeepsRepairCost(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         ItemStack sword = new ItemStack(Items.IRON_SWORD);
         sword.setDamageValue(100);
         sword.set(DataComponents.REPAIR_COST, 10);
@@ -100,7 +101,7 @@ public class AnvilRepairGameTest {
      */
     @GameTest
     public void itemMergeStillIncreasesRepairCost(GameTestHelper helper) {
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
         ItemStack input = new ItemStack(Items.IRON_SWORD);
         input.setDamageValue(100);
         input.set(DataComponents.REPAIR_COST, 10);
