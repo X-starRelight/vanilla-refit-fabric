@@ -1,11 +1,13 @@
 package com.tt23xrstudio.vanilla_refit_fabric.entity;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -25,8 +27,9 @@ public class SitEntity extends Entity {
 
     public SitEntity(EntityType<? extends SitEntity> type, Level level) {
         super(type, level);
-        this.noPhysics = true;
-        this.setNoGravity(true);
+        // 需要与方块碰撞才不会穿地（26.2 半空坐下会受重力下落，见 tick()）；
+        // 重力不再关闭——半空按下 Z 后座位应继续掉落，落地被地面托住（用户要求）。
+        this.noPhysics = false;
     }
 
     // 26.2 契约（与 1.21 源项目同款写法）：defineSynchedData 是抽象方法，子类只登记「自己的」追踪数据，
@@ -91,9 +94,36 @@ public class SitEntity extends Entity {
     @Override
     public void tick() {
         super.tick();
+        if (!this.level().isClientSide()) {
+            // 26.2 实证（gametest 探测：40 tick 后 delta 恒为 (0,0,0)，applyGravity() 也无效——
+            // 基类 getDefaultGravity() 返回 0）：Entity.tick() 不为普通实体集成重力与位移，
+            // 必须自己施加重力并 move()，否则半空坐下会悬停（用户反馈的 bug）。
+            if (!this.isNoGravity()) {
+                Vec3 velocity = this.getDeltaMovement();
+                this.setDeltaMovement(velocity.x, velocity.y - 0.08D, velocity.z);
+            }
+            this.move(MoverType.SELF, this.getDeltaMovement());
+            // 落地（onGround 或脚下紧贴实体方块）后清零竖直速度，防止重力逐 tick 无限累积；
+            // 未落地时施加原版空气阻力（×0.98），避免高空落下速度无上限。
+            Vec3 afterMove = this.getDeltaMovement();
+            if (this.onGround() || blockedBelow()) {
+                if (afterMove.y != 0.0D) {
+                    this.setDeltaMovement(afterMove.x, 0.0D, afterMove.z);
+                }
+            } else {
+                this.setDeltaMovement(afterMove.scale(0.98D));
+            }
+        }
         // 无人骑乘时自动清理（玩家死亡、离开或退出时）。
         if (!this.level().isClientSide() && this.getPassengers().isEmpty()) {
             this.discard();
         }
+    }
+
+    /** 座位正下方 0.01 格处是否有带碰撞形状的方块（兜底判定“被托住”，不依赖 onGround 语义）。 */
+    private boolean blockedBelow() {
+        Level level = this.level();
+        BlockPos below = BlockPos.containing(this.getX(), this.getY() - 0.01D, this.getZ());
+        return !level.getBlockState(below).getCollisionShape(level, below).isEmpty();
     }
 }

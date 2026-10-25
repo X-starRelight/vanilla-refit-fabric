@@ -24,6 +24,7 @@ import net.minecraft.world.entity.vehicle.VehicleEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.AABB;
@@ -275,8 +276,11 @@ public class SitLogicGameTest {
     @GameTest
     public void sitEyeHeightDropsOnce(GameTestHelper helper) {
         ServerPlayer player = MockPlayers.mockPlayer(helper);
+        // 26.2 座位受重力：没有地板的话座位会一边下落一边断言（-0.6 会被叠加下落量），
+        // 先铺地板、站在方块顶面坐下，座位由地面托住立即稳定。
+        helper.setBlock(2, 1, 2, Blocks.STONE);
         BlockPos spot = helper.absolutePos(new BlockPos(2, 1, 2));
-        player.setPos(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
+        player.setPos(spot.getX() + 0.5, spot.getY() + 1.0D, spot.getZ() + 0.5);
         double feetBefore = player.getY();
 
         SitLogic.toggleSit(player);
@@ -309,6 +313,43 @@ public class SitLogicGameTest {
             double dismountDelta = player.getY() - feetBefore;
             if (Math.abs(dismountDelta) > 0.05D) {
                 helper.fail("下车后脚底位移=" + dismountDelta + "，应回到原站位");
+                return;
+            }
+            helper.succeed();
+        });
+    }
+
+    /**
+     * 半空坐下：座位受重力落到地面并被托住，玩家全程仍骑乘（不悬停）。
+     *
+     * <p>用户要求：世界有重力，半空按 Z 坐下后应继续掉落而不是停在原地；
+     * 站在地面坐下时座位因碰撞立即被地面托住，无视觉差异。</p>
+     */
+    @GameTest(maxTicks = 60)
+    public void seatFallsFromMidAir(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
+        // 默认结构是空的：自己铺一块地板（占 y=1，顶面在 y=2），从 y=5 半空坐下
+        helper.setBlock(2, 1, 2, Blocks.STONE);
+        BlockPos spot = helper.absolutePos(new BlockPos(2, 5, 2));
+        player.setPos(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
+        double spawnY = player.getY();
+
+        SitLogic.toggleSit(player);
+
+        helper.runAfterDelay(40L, () -> {
+            if (!(player.getVehicle() instanceof SitEntity seat)) {
+                helper.fail("应仍坐在座位上（车辆=" + player.getVehicle() + "）");
+                return;
+            }
+            BlockPos below = BlockPos.containing(seat.getX(), seat.getY() - 0.01D, seat.getZ());
+            boolean landed = !level.getBlockState(below).getCollisionShape(level, below).isEmpty();
+            double dropped = spawnY - player.getY();
+            if (!landed || dropped < 2.0D) {
+                helper.fail("半空座位未落地：玩家下落=" + dropped
+                        + "｜seatY=" + seat.getY() + "｜delta=" + seat.getDeltaMovement()
+                        + "｜onGround=" + seat.onGround() + "｜noGravity=" + seat.isNoGravity()
+                        + "｜脚下=" + level.getBlockState(below));
                 return;
             }
             helper.succeed();

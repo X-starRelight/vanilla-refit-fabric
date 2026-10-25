@@ -65,7 +65,9 @@ public final class SitCrawlClient {
                         || client.options.keyDown.isDown()
                         || client.options.keyLeft.isDown()
                         || client.options.keyRight.isDown()
-                        || client.options.keyJump.isDown())) {
+                        || client.options.keyJump.isDown()
+                        || client.options.keyShift.isDown()
+                        || client.options.keySprint.isDown())) {
                 ClientPlayNetworking.send(new SitTogglePayload());
                 sitToggleSent = true;
             }
