@@ -264,6 +264,59 @@ public class SitLogicGameTest {
         helper.succeed();
     }
 
+    /**
+     * 坐姿第一人称眼高（26.2 语义）：骑上座位后 {@code getEyeY()-getY()} 应为 1.62-0.35=1.27。
+     *
+     * <p>26.2 相机与弹道走 {@code getEyeY()}（研究 §5-①：读 eyeHeight 字段、不调 getEyeHeight()），
+     * 两个注入各自只该下沉一次；若 {@code getEyeY} 内部实际经由 {@code getEyeHeight()} 计算，
+     * 两条 -0.35 会叠成 0.92（视角过低），本用例钉住该语义。同时断言骑乘后脚底仍在原地
+     * （座位挂接点没有把人塞低）。</p>
+     */
+    @GameTest
+    public void sitEyeHeightDropsOnce(GameTestHelper helper) {
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
+        BlockPos spot = helper.absolutePos(new BlockPos(2, 1, 2));
+        player.setPos(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
+        double feetBefore = player.getY();
+
+        SitLogic.toggleSit(player);
+
+        helper.runAfterDelay(2L, () -> {
+            if (!(player.getVehicle() instanceof SitEntity seat)) {
+                helper.fail("未坐上座位（车辆=" + player.getVehicle() + "）");
+                return;
+            }
+            double feetDelta = player.getY() - feetBefore;
+            if (Math.abs(feetDelta) > 0.05D) {
+                StringBuilder diag = new StringBuilder();
+                diag.append("骑乘后脚底位移=").append(feetDelta);
+                diag.append("｜座位y=").append(seat.getY());
+                diag.append("｜玩家bb=").append(player.getBbWidth()).append("x").append(player.getBbHeight());
+                diag.append("｜vehicleAttach=").append(player.getVehicleAttachmentPoint(seat));
+                diag.append("｜ridingPos=").append(seat.getPassengerRidingPosition(player));
+                helper.fail(diag.toString());
+                return;
+            }
+            double eyeDelta = player.getEyeY() - player.getY();
+            if (Math.abs(eyeDelta - 1.27D) > 0.01D) {
+                helper.fail("坐姿眼高差=" + eyeDelta + "，期望 1.27（1.62-0.35 单次下沉）");
+                return;
+            }
+            // 下车后回到原站位（挂接点改动不得让站起时弹跳/瞬移）
+            SitLogic.toggleSit(player);
+            if (player.isPassenger()) {
+                helper.fail("再 toggle 一次应下车");
+                return;
+            }
+            double dismountDelta = player.getY() - feetBefore;
+            if (Math.abs(dismountDelta) > 0.05D) {
+                helper.fail("下车后脚底位移=" + dismountDelta + "，应回到原站位");
+                return;
+            }
+            helper.succeed();
+        });
+    }
+
     /** 爬行标记：默认 false -> true -> false（服务端 UUID 集合读写）。 */
     @GameTest
     public void crawlFlagRoundTrip(GameTestHelper helper) {

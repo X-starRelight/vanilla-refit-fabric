@@ -76,10 +76,14 @@ public class SitEntity extends Entity {
         return false;
     }
 
-    // 玩家坐在座位上时，底边贴合座位位置（略微抬高以免穿地）。
+    // 玩家坐在座位上时，底边贴合座位位置。
+    // 26.2 实证（gametest 测量）：最终乘客位置 = 座位位置 + 本挂接点 - 乘客的 VEHICLE 挂点
+    // （玩家为 (0, 0.6, 0)）。1.21 语义是“位置 = 座位位置 + 本挂接点”，直接返回 ZERO
+    // 会让人被塞低 0.6 格（脚底 -0.6、眼高只剩 0.67）。返回乘客的 VEHICLE 挂点与之抵消，
+    // 脚底贴合座位（与源项目同观感）。
     @Override
     protected Vec3 getPassengerAttachmentPoint(Entity passenger, EntityDimensions dimensions, float partialTick) {
-        return Vec3.ZERO;
+        return passenger.getVehicleAttachmentPoint(this);
     }
 
     @Override

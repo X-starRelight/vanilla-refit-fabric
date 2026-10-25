@@ -156,7 +156,11 @@ public class FenceKnotEntity extends LeashFenceKnotEntity {
         BlockPos selfPos = this.getPos();
         if (!isFence(selfPos)) {
             // 自己所在的栅栏被拆：断开所有连接并移除本结。
-            // 返还拴绳由仍存在的伙伴结负责（它们会检测到本结栅栏消失）。
+            // 返还规则（防双还/防丢失）：
+            // - 伙伴栅栏还在 → 由伙伴结负责返还（它下个 tick 会检测到本结栅栏消失）；
+            // - 伙伴栅栏也没了（两端同一 tick 消失，如整段结构被机械动力收走）→
+            //   原逻辑“指望伙伴还”两头落空、拴绳凭空丢失（源项目同款缺陷，Create 暴露），
+            //   改由坐标较小的一侧结返还，每条连接恰好还一次。
             UUID pending = this.getPendingPlayer();
             if (pending != null) {
                 for (Player player : this.level().players()) {
@@ -164,6 +168,11 @@ public class FenceKnotEntity extends LeashFenceKnotEntity {
                         FenceRopeLogic.clearPending(player);
                         break;
                     }
+                }
+            }
+            for (Map.Entry<BlockPos, Boolean> entry : this.getPartners().entrySet()) {
+                if (entry.getValue() && !isFence(entry.getKey()) && selfPos.asLong() < entry.getKey().asLong()) {
+                    this.dropLead();
                 }
             }
             this.clearPartners();

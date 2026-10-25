@@ -116,6 +116,37 @@ public class LeashRopeGameTest {
     }
 
     /**
+     * 两端栅栏同一 tick 都消失（机械动力装配：整段结构被收进运动方块的情形）。
+     *
+     * <p>原逻辑：消失侧的结只清伙伴不掉落，指望「仍在的伙伴结」返还——两端同时消失就没人还，
+     * 拴绳凭空丢失。规则改为：伙伴栅栏也已消失时，由坐标较小的一侧结返还（每条连接恰好一次）。</p>
+     */
+    @GameTest
+    public void bothFencesGoneStillReturnsLead(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos a = helper.absolutePos(new BlockPos(1, 1, 1));
+        BlockPos b = helper.absolutePos(new BlockPos(3, 1, 1));
+
+        helper.setBlock(1, 1, 1, Blocks.OAK_FENCE);
+        helper.setBlock(3, 1, 1, Blocks.OAK_FENCE);
+        FenceRopeLogic.connect(level, a, b, true);
+
+        helper.runAfterDelay(1L, () -> {
+            // 两端同一 tick 变成空气（等价于整段结构被 Create 收走）
+            helper.setBlock(1, 1, 1, Blocks.AIR);
+            helper.setBlock(3, 1, 1, Blocks.AIR);
+
+            helper.runAfterDelay(3L, () -> {
+                long leads = totalItems(level, a, stack -> stack.is(Items.LEAD));
+                if (leads != 1L) {
+                    helper.fail("两端栅栏同时消失应恰好掉落 1 根拴绳，实际 " + leads);
+                }
+                helper.succeed();
+            });
+        });
+    }
+
+    /**
      * 贴台阶位移的纯函数计算（绳结高度 = 方块 y + 0.375 + 位移量）。
      *
      * <p>实体侧的位移断言（recalculateBoundingBox mixin + 每 tick refresh）在任务 2 的
