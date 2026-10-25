@@ -19,6 +19,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -67,8 +68,9 @@ public abstract class MultiPlayerGameModeMixin {
     @Shadow(remap = false)
     public abstract InteractionResult useItemOn(LocalPlayer player, InteractionHand hand, BlockHitResult result);
 
+    // 26.2：interact 由 3 参变 4 参（新增 EntityHitResult，与 UseEntityCallback 时代的命中上下文一致）
     @Shadow(remap = false)
-    public abstract InteractionResult interact(Player player, Entity target, InteractionHand hand);
+    public abstract InteractionResult interact(Player player, Entity target, EntityHitResult hitResult, InteractionHand hand);
 
     /** 防重入：改判后要再走一遍 {@code useItemOn}，不能又被自己拦一次。 */
     @Unique
@@ -140,7 +142,7 @@ public abstract class MultiPlayerGameModeMixin {
         this.vanillaRefit$redirectingUse = true;
         try {
             cir.setReturnValue(knot != null
-                    ? this.interact(player, knot, hand)
+                    ? this.interact(player, knot, new EntityHitResult(knot), hand)
                     : this.useItemOn(player, hand, vanillaRefit$reclipToBlock(player, target, hitResult)));
         } finally {
             this.vanillaRefit$redirectingUse = false;
