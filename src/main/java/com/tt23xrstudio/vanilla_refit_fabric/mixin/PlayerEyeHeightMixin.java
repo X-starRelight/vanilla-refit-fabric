@@ -8,10 +8,11 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 /**
- * 坐姿眼高下沉 0.35（源项目 §2.7，原注入 {@code @Mixin(Entity.class)}）。
+ * 坐姿第一人称眼高（源项目 §2.7 降 0.35）+ 26.2 骑乘 origin 下沉补偿。
  *
- * <p>只对「玩家骑在本模组座位上」生效，避免影响其它实体的眼高语义。
- * {@code defaultRequire 1}：注入点失效即启动期硬错误。
+ * <p>26.2 骑乘把 origin 下沉乘客 VEHICLE 挂点（玩家 0.6，见 {@code SitEntity} 注释）换取
+ * 模型髋部贴座位；绝对眼高要补回这 0.6，才与源项目一致（原站位上方 1.62-0.35=1.27）。
+ * 只对「玩家骑在本模组座位上」生效。{@code defaultRequire 1}：注入点失效即启动期硬错误。
  */
 @Mixin(Entity.class)
 public abstract class PlayerEyeHeightMixin {
@@ -20,8 +21,8 @@ public abstract class PlayerEyeHeightMixin {
     @ModifyReturnValue(method = "getEyeHeight()F", at = @At("RETURN"), remap = false)
     private float vanillaRefit$lowerEyeWhileSitting(float original) {
         Entity self = (Entity) (Object) this;
-        if (self instanceof Player player && player.getVehicle() instanceof SitEntity) {
-            return original - 0.35F;
+        if (self instanceof Player player && player.getVehicle() instanceof SitEntity vehicle) {
+            return original - 0.35F + (float) player.getVehicleAttachmentPoint(vehicle).y;
         }
         return original;
     }
@@ -30,8 +31,8 @@ public abstract class PlayerEyeHeightMixin {
     @ModifyReturnValue(method = "getEyeY()D", at = @At("RETURN"), remap = false)
     private double vanillaRefit$lowerEyeYWhileSitting(double original) {
         Entity self = (Entity) (Object) this;
-        if (self instanceof Player player && player.getVehicle() instanceof SitEntity) {
-            return original - 0.35D;
+        if (self instanceof Player player && player.getVehicle() instanceof SitEntity vehicle) {
+            return original - 0.35D + player.getVehicleAttachmentPoint(vehicle).y;
         }
         return original;
     }

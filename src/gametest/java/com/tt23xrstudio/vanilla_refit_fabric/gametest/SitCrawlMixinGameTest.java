@@ -24,24 +24,33 @@ import java.lang.reflect.Method;
  */
 public class SitCrawlMixinGameTest {
 
-    /** 坐姿眼高下沉：getEyeHeight() 与 getEyeY() 都应比未注入重载的基准低 0.35。 */
+    /**
+     * 坐姿眼高：getEyeHeight() 与 getEyeY() 都 = 未注入基准 − 0.35 + 乘客 VEHICLE 挂点 y 补偿。
+     *
+     * <p>26.2 骑乘 origin = 座位 − 挂点(玩家 0.6)（模型髋部才贴座位），实体 y 比站位低 0.6；
+     * 眼高 mixin 补回这 0.6 → 绝对眼高（y+eyeHeight）仍 = 站位 + raw − 0.35。</p>
+     */
     @GameTest
     public void sittingLowersEyeHeight(GameTestHelper helper) {
         ServerPlayer player = MockPlayers.mockPlayer(helper);
+        double feetBefore = player.getY();
         SitLogic.toggleSit(player);
-        if (!(player.getVehicle() instanceof SitEntity)) {
+        if (!(player.getVehicle() instanceof SitEntity seat)) {
             helper.fail("应已坐下，实际载具=" + player.getVehicle());
             return;
         }
+        double comp = player.getVehicleAttachmentPoint(seat).y;
         // getEyeHeight(Pose) 是未被注入的重载（计划研究 ✅），用作"原始眼高"基准
         float raw = player.getEyeHeight(player.getPose());
-        if (Math.abs(player.getEyeHeight() - (raw - 0.35F)) > 1.0e-3F) {
-            helper.fail("坐姿 getEyeHeight 应为 raw-0.35，实际 " + player.getEyeHeight() + " raw=" + raw);
+        if (Math.abs(player.getEyeHeight() - (raw - 0.35F + (float) comp)) > 1.0e-3F) {
+            helper.fail("坐姿 getEyeHeight 应为 raw-0.35+" + comp + "，实际 "
+                    + player.getEyeHeight() + " raw=" + raw);
             return;
         }
-        // 不确定：eyeHeight 字段与 getEyeHeight(Pose) 是否恒等（§5-⑤-3）；若失败改为相对差值断言
-        if (Math.abs(player.getEyeY() - (player.getY() + raw - 0.35D)) > 1.0e-3D) {
-            helper.fail("坐姿 getEyeY 应为 y+raw-0.35，实际 " + player.getEyeY());
+        // 绝对眼高（离坐前站位）= raw - 0.35：实体下沉 0.6 由 mixin 补偿抵消
+        if (Math.abs(player.getEyeY() - (feetBefore + raw - 0.35D)) > 1.0e-3D) {
+            helper.fail("绝对眼高应为 站位+raw-0.35，实际 y+eyeHeight=" + player.getEyeY()
+                    + " 站位=" + feetBefore);
             return;
         }
         helper.succeed();

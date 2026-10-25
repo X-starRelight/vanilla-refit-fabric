@@ -49,7 +49,11 @@ public final class SitCrawlClient {
             }
             if (client.gui.screen() == null && ModKeyBindings.sitKey().consumeClick()) {
                 ClientPlayNetworking.send(new SitTogglePayload());
-                sitToggleSent = true;
+                // 只有“站起”方向（按下时已坐着）才抑制本会话的自动站起，防止站起 roundtrip
+                // 期间移动键再发一次 toggle 把人坐回去；“坐下”方向必须保持 false——
+                // 若也置位，坐下的下一 tick 起 seated=true、标志永远没机会复位，
+                // 自动站起就永久失效（上一版实测到的 bug：坐着按 WASD 毫无反应）。
+                sitToggleSent = seated;
             }
 
             // 坐着不冻结（用户要求）：按任意移动键/跳跃 → 自动站起来，WASD 与重力立即恢复

@@ -265,12 +265,12 @@ public class SitLogicGameTest {
     }
 
     /**
-     * 坐姿第一人称眼高（26.2 语义）：骑上座位后 {@code getEyeY()-getY()} 应为 1.62-0.35=1.27。
+     * 坐姿位置与眼高（26.2 附件语义，双向实证）。
      *
-     * <p>26.2 相机与弹道走 {@code getEyeY()}（研究 §5-①：读 eyeHeight 字段、不调 getEyeHeight()），
-     * 两个注入各自只该下沉一次；若 {@code getEyeY} 内部实际经由 {@code getEyeHeight()} 计算，
-     * 两条 -0.35 会叠成 0.92（视角过低），本用例钉住该语义。同时断言骑乘后脚底仍在原地
-     * （座位挂接点没有把人塞低）。</p>
+     * <p>骑乘落点 = 座位 − 乘客 VEHICLE 挂点(0.6)：origin 下沉 0.6，客户端渲染器把模型髋部
+     * 画在 origin+0.6 → 屁股贴地（曾改为落点贴地，相机对了但模型整体悬空 0.6，已回退）；
+     * 眼高 mixin 补回 0.6 → 绝对眼高 = 原站位 + 1.62 − 0.35 = 1.27（与源项目一致）。
+     * 下车后必须回到原站位。</p>
      */
     @GameTest
     public void sitEyeHeightDropsOnce(GameTestHelper helper) {
@@ -287,19 +287,17 @@ public class SitLogicGameTest {
                 return;
             }
             double feetDelta = player.getY() - feetBefore;
-            if (Math.abs(feetDelta) > 0.05D) {
+            if (Math.abs(feetDelta + 0.6D) > 0.05D) {
                 StringBuilder diag = new StringBuilder();
-                diag.append("骑乘后脚底位移=").append(feetDelta);
+                diag.append("骑乘后脚底位移=").append(feetDelta).append("，期望 -0.6");
                 diag.append("｜座位y=").append(seat.getY());
-                diag.append("｜玩家bb=").append(player.getBbWidth()).append("x").append(player.getBbHeight());
                 diag.append("｜vehicleAttach=").append(player.getVehicleAttachmentPoint(seat));
-                diag.append("｜ridingPos=").append(seat.getPassengerRidingPosition(player));
                 helper.fail(diag.toString());
                 return;
             }
-            double eyeDelta = player.getEyeY() - player.getY();
-            if (Math.abs(eyeDelta - 1.27D) > 0.01D) {
-                helper.fail("坐姿眼高差=" + eyeDelta + "，期望 1.27（1.62-0.35 单次下沉）");
+            double eyeAbs = player.getEyeY() - feetBefore;
+            if (Math.abs(eyeAbs - 1.27D) > 0.01D) {
+                helper.fail("绝对眼高(离原站位)=" + eyeAbs + "，期望 1.27（1.62-0.35 单次下沉）");
                 return;
             }
             // 下车后回到原站位（挂接点改动不得让站起时弹跳/瞬移）
