@@ -48,6 +48,11 @@ public final class SitLogic {
 
         SitEntity seat = new SitEntity(ModEntities.SIT, level);
         seat.setPos(player.getX(), player.getY(), player.getZ());
+        // 创造飞行悬停时坐下（用户要求）：保持原地悬停，不施加重力下落；
+        // 生存/非飞行半空坐下仍受重力落到地面。座位一次性使用，坐姿会话内标志不变。
+        if (player.getAbilities().flying) {
+            seat.setNoGravity(true);
+        }
         serverLevel.addFreshEntity(seat);
         // (entityToRide, force, sendEventAndTriggers) —— 26.2 的三参签名。
         player.startRiding(seat, true, true);

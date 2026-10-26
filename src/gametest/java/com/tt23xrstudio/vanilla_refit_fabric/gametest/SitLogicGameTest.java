@@ -356,6 +356,50 @@ public class SitLogicGameTest {
         });
     }
 
+    /**
+     * 坐下时的重力分流（用户要求）：创造飞行悬停按 Z → 座位 noGravity 原地悬停不下落；
+     * 非飞行（生存半空）按 Z → 座位受重力下落。
+     */
+    @GameTest(maxTicks = 60)
+    public void creativeFlightSitHovers(GameTestHelper helper) {
+        ServerPlayer player = MockPlayers.mockPlayer(helper);
+        BlockPos spot = helper.absolutePos(new BlockPos(2, 5, 2));
+        player.setPos(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
+
+        // 创造飞行悬停坐下
+        player.getAbilities().flying = true;
+        SitLogic.toggleSit(player);
+        if (!(player.getVehicle() instanceof SitEntity seat)) {
+            helper.fail("飞行时应能坐下（车辆=" + player.getVehicle() + "）");
+            return;
+        }
+        if (!seat.isNoGravity()) {
+            helper.fail("创造飞行坐下时座位应 noGravity 悬停");
+            return;
+        }
+        double hoverY = seat.getY();
+
+        helper.runAfterDelay(20L, () -> {
+            if (Math.abs(seat.getY() - hoverY) > 1.0E-3D) {
+                helper.fail("飞行悬停座位不应下落：y=" + seat.getY() + "，原=" + hoverY);
+                return;
+            }
+            // 站起、退出飞行标志，再坐下：座位应恢复受重力
+            SitLogic.toggleSit(player);
+            player.getAbilities().flying = false;
+            SitLogic.toggleSit(player);
+            if (!(player.getVehicle() instanceof SitEntity groundSeat)) {
+                helper.fail("非飞行应能坐下（车辆=" + player.getVehicle() + "）");
+                return;
+            }
+            if (groundSeat.isNoGravity()) {
+                helper.fail("非飞行坐下座位应受重力（noGravity 应为 false）");
+                return;
+            }
+            helper.succeed();
+        });
+    }
+
     /** 爬行标记：默认 false -> true -> false（服务端 UUID 集合读写）。 */
     @GameTest
     public void crawlFlagRoundTrip(GameTestHelper helper) {

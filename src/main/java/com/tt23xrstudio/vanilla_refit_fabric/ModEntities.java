@@ -25,8 +25,14 @@ public final class ModEntities {
     public static final Identifier FENCE_KNOT_ID = Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "fence_knot");
 
     /**
-     * 隐形座位：随盘保存、尺寸 0.001×0.001、追踪范围 10 格、更新间隔
-     * {@code Integer.MAX_VALUE}（几乎不发位置同步包——座位本身永远不动）。
+     * 隐形座位：随盘保存、尺寸 0.001×0.001、追踪范围 10 格。
+     *
+     * <p><b>updateInterval 必须是小值（此处为 1）</b>：26.2 {@code ServerEntity.sendChanges()}
+     * 只在 {@code tickCount % updateInterval == 0} 的分支里才比较并发送位置包。早期座位
+     * 静止时曾照抄绳结用 {@code Integer.MAX_VALUE}，半空坐下受重力下落后即成致命 bug——
+     * 服务端一路落到底、客户端位置包永远不发，玩家在客户端冻结在半空、站起瞬间才被
+     * 服务端权威位置拽到地面（用户实测反馈）。1 = 每 tick 检查，位置有变立即同步，
+     * 下落平滑；位置未变时并不产生实际包，开销可忽略。
      */
     public static final EntityType<SitEntity> SIT = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
@@ -37,7 +43,7 @@ public final class ModEntities {
                     // 26.1 世界存储重构后，骑上不入盘的实体会导致存档时玩家-载具关联断裂。
                     // 故座位必须随盘保存；无人骑乘时仍由 tick() 立即 discard，行为不变。
                     .clientTrackingRange(10)
-                    .updateInterval(Integer.MAX_VALUE)
+                    .updateInterval(1)
                     .build(ResourceKey.create(Registries.ENTITY_TYPE, SIT_ID)));
 
     /**
