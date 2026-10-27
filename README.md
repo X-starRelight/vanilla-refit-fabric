@@ -45,7 +45,7 @@ Vanilla Refit Fabric（原版精修）是一个 Fabric Mod，在原版基础上�
 ### 构建
 
 ```bash
-./gradlew build       # 打包，产物在 build/libs
+./gradlew build       # 打包，产物在 build/libs （自带 GameTest ）
 ./gradlew runData     # 重新生成方块状态与模型
 ./gradlew runClient   # 启动开发环境客户端
 ```
