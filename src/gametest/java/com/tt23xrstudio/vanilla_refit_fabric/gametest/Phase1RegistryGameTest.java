@@ -29,43 +29,15 @@ public class Phase1RegistryGameTest {
     /** 注册表双向可查：id ↔ 实例（方块与物品都要能查到）。 */
     @GameTest
     public void registryRoundTrip(GameTestHelper helper) {
-        Identifier stairsId = Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "smooth_stone_stairs");
         Identifier slabId = Identifier.fromNamespaceAndPath(VanillaRefitFabric.MOD_ID, "merged_slab");
 
-        if (BuiltInRegistries.BLOCK.getValue(stairsId) != ModBlocks.SMOOTH_STONE_STAIRS) {
-            helper.fail("方块注册表查不到 smooth_stone_stairs（或指向了别的实例）");
-        }
         if (BuiltInRegistries.BLOCK.getValue(slabId) != ModBlocks.MERGED_SLAB) {
             helper.fail("方块注册表查不到 merged_slab");
-        }
-        if (BuiltInRegistries.ITEM.getValue(stairsId) != ModBlocks.SMOOTH_STONE_STAIRS_ITEM) {
-            helper.fail("smooth_stone_stairs 物品未注册");
         }
         if (BuiltInRegistries.ITEM.getValue(slabId) != ModBlocks.MERGED_SLAB_ITEM) {
             helper.fail("merged_slab 物品未注册");
         }
         helper.succeed();
-    }
-
-    /** 平滑石楼梯：可放置；破坏后经 data loot table 恰好掉 1 个自身物品。 */
-    @GameTest
-    public void stairsPlaceAndDrop(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
-
-        helper.setBlock(1, 0, 1, Blocks.BEDROCK); // 地板，防止掉落物坠出扫描范围
-        helper.setBlock(1, 1, 1, ModBlocks.SMOOTH_STONE_STAIRS);
-        helper.assertBlockPresent(ModBlocks.SMOOTH_STONE_STAIRS, 1, 1, 1);
-
-        level.destroyBlock(pos, true);
-
-        helper.runAfterDelay(2L, () -> {
-            long count = totalItems(level, pos, stack -> stack.is(ModBlocks.SMOOTH_STONE_STAIRS_ITEM));
-            if (count != 1L) {
-                helper.fail("平滑石楼梯破坏后应恰好掉落 1 个自身物品，实际 " + count);
-            }
-            helper.succeed();
-        });
     }
 
     /**

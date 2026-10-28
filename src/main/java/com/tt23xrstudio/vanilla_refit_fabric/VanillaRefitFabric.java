@@ -8,12 +8,7 @@ import com.tt23xrstudio.vanilla_refit_fabric.util.CrawlLogic;
 import com.tt23xrstudio.vanilla_refit_fabric.util.PaneCornerSupport;
 import com.tt23xrstudio.vanilla_refit_fabric.util.PlacementModeState;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.item.CreativeModeTab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,10 +21,6 @@ public class VanillaRefitFabric implements ModInitializer {
 
     public static final String MOD_ID = "vanilla_refit_fabric";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
-    /** 原版“建筑方块”创造栏（26.2 起 vanilla 的 ResourceKey 字段是私有的，按 id 自行构造）。 */
-    private static final ResourceKey<CreativeModeTab> BUILDING_BLOCKS_TAB =
-            ResourceKey.create(Registries.CREATIVE_MODE_TAB, Identifier.withDefaultNamespace("building_blocks"));
 
     @Override
     public void onInitialize() {
@@ -54,10 +45,6 @@ public class VanillaRefitFabric implements ModInitializer {
         // 爬行状态：断线时清掉 UUID 标记
         CrawlLogic.init();
         PlacementModeState.init();
-
-        // 创造模式物品栏：平滑石楼梯加入原版“建筑方块”
-        CreativeModeTabEvents.modifyOutputEvent(BUILDING_BLOCKS_TAB)
-                .register(output -> output.accept(ModBlocks.SMOOTH_STONE_STAIRS_ITEM));
 
         // 玻璃板部件属性注入自检（服务器启动时方块注册表已就绪）
         ServerLifecycleEvents.SERVER_STARTED.register(server -> PaneCornerSupport.logSummary());

@@ -1,7 +1,6 @@
 package com.tt23xrstudio.vanilla_refit_fabric;
 
 import com.tt23xrstudio.vanilla_refit_fabric.block.MixedSlabBlock;
-import com.tt23xrstudio.vanilla_refit_fabric.block.ModStairsBlock;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
@@ -10,7 +9,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -23,20 +21,6 @@ import net.minecraft.world.level.material.MapColor;
  * {@link VanillaRefitFabric#onInitialize()} 调用 {@link #initialize()}。
  */
 public final class ModBlocks {
-
-    /** 平滑石楼梯（复用原版 StairBlock 行为；26.2 构造器 protected → 包装子类）。 */
-    public static final Block SMOOTH_STONE_STAIRS = Registry.register(
-            BuiltInRegistries.BLOCK,
-            id("smooth_stone_stairs"),
-            new ModStairsBlock(
-                    Blocks.SMOOTH_STONE.defaultBlockState(),
-                    BlockBehaviour.Properties.ofFullCopy(Blocks.SMOOTH_STONE)
-                            // 26.2：Block 构造时 effectiveDrops 要用 id 拼掉落表 key，必须先 setId
-                            .setId(blockKey("smooth_stone_stairs"))));
-
-    /** 平滑石楼梯物品。 */
-    public static final Item SMOOTH_STONE_STAIRS_ITEM =
-            registerBlockItem("smooth_stone_stairs", SMOOTH_STONE_STAIRS);
 
     /**
      * 混合半砖：一格子里放两块“不同材质”的半砖（材质存方块实体）。
